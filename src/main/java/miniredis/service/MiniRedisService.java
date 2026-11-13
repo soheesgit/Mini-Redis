@@ -8,10 +8,14 @@ import java.util.Objects;
 
 import miniredis.storage.HashTable;
 
-/** 해시 테이블을 사용해 문자열 키와 값에 대한 명령을 실행한다. */
+/**
+ * 해시 테이블을 사용해 문자열 키와 값에 대한 명령을 실행한다.
+ * 같은 서비스 인스턴스에서 모든 명령은 하나의 CAS 락을 공유한다.
+ */
 public final class MiniRedisService {
     private final HashTable<StoredValue> table;
     private final Clock clock;
+    private final CasLock commandLock = new CasLock();
 
     public MiniRedisService(int bucketCount) {
         this(bucketCount, Clock.systemUTC());
@@ -24,7 +28,12 @@ public final class MiniRedisService {
 
     /** 만료 시각 없이 저장한다. 같은 키를 덮어쓰면 이전 TTL도 지운다. */
     public void set(String key, String value) {
-        table.put(key, new StoredValue(value, null));
+        commandLock.lock();
+        try {
+            table.put(key, new StoredValue(value, null));
+        } finally {
+            commandLock.unlock();
+        }
     }
 
     /**
@@ -34,37 +43,53 @@ public final class MiniRedisService {
      * @throws NullPointerException TTL, 키 또는 값이 {@code null}인 경우
      */
     public void set(String key, String value, Duration ttl) {
-        Objects.requireNonNull(ttl, "ttl");
-        if (ttl.isZero() || ttl.isNegative()) {
-            throw new IllegalArgumentException("ttl must be positive");
-        }
-
-        Instant expiresAt;
+        commandLock.lock();
         try {
-            expiresAt = clock.instant().plus(ttl);
-        } catch (DateTimeException | ArithmeticException exception) {
-            throw new IllegalArgumentException("ttl exceeds the supported expiration range", exception);
+            Objects.requireNonNull(ttl, "ttl");
+            if (ttl.isZero() || ttl.isNegative()) {
+                throw new IllegalArgumentException("ttl must be positive");
+            }
+
+            Instant expiresAt;
+            try {
+                expiresAt = clock.instant().plus(ttl);
+            } catch (DateTimeException | ArithmeticException exception) {
+                throw new IllegalArgumentException("ttl exceeds the supported expiration range", exception);
+            }
+            table.put(key, new StoredValue(value, expiresAt));
+        } finally {
+            commandLock.unlock();
         }
-        table.put(key, new StoredValue(value, expiresAt));
     }
 
     /** 키의 값을 반환한다. 키가 없거나 만료됐으면 {@code null}을 반환한다. */
     public String get(String key) {
-        StoredValue stored = table.get(key);
-        if (stored == null) {
-            return null;
+        commandLock.lock();
+        try {
+            StoredValue stored = table.get(key);
+            if (stored == null) {
+                return null;
+            }
+            if (isExpired(stored)) {
+                // 조회한 엔트리를 만료 처리하는 동안 같은 키를 덮어쓸 수 없다.
+                table.remove(key);
+                return null;
+            }
+            return stored.value();
+        } finally {
+            commandLock.unlock();
         }
-        if (isExpired(stored)) { // 지연 만료 (Lazy Expiration). 데이터가 만료 되어도 일단 남겨 두었다가 요청했을 때 삭제
-            table.remove(key);
-            return null;
-        }
-        return stored.value();
     }
 
     /** 유효한 키를 삭제했으면 {@code true}, 없거나 만료됐으면 {@code false}를 반환한다. */
     public boolean del(String key) {
-        StoredValue removed = table.remove(key);
-        return removed != null && !isExpired(removed);
+        commandLock.lock();
+        try {
+            StoredValue removed = table.remove(key);
+            return removed != null && !isExpired(removed);
+        } finally {
+            commandLock.unlock();
+        }
     }
 
     /** 만료 시각이 존재하고, 현재 시각이 만료 시각과 같거나 이후라면 만료된 것으로 판단. 만료되었으면 True, 아직 만료되지 않았다면 False **/
