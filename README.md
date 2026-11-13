@@ -34,3 +34,32 @@ JDK 21을 선택한 상태에서 Gradle Wrapper로 테스트 작업을 실행합
 ```
 
 Java 소스는 `src/main/java`, JUnit 5 테스트는 `src/test/java`에 둡니다. Stage 1의 해시 테이블과 테스트는 각 경로의 `miniredis/storage` 패키지에 작성합니다.
+
+## REST API 실행
+
+JDK 21 환경에서 서버를 실행합니다. 기본 포트는 8080입니다.
+
+```sh
+./gradlew bootRun
+```
+
+| 요청 | 성공 응답 | 키가 없거나 만료된 경우 |
+| --- | --- | --- |
+| `PUT /api/cache/{key}` | `204 No Content` | 새 키를 생성합니다. |
+| `GET /api/cache/{key}` | `200 OK`와 JSON 값 | `404 Not Found` |
+| `DELETE /api/cache/{key}` | `204 No Content` | `404 Not Found` |
+
+`PUT`은 JSON 문자열 `value`를 받습니다. 빈 문자열도 저장할 수 있습니다. `ttlSeconds`는 선택 항목이며, 지정할 때는 양의 정수를 사용합니다. 생략하거나 `null`을 전달하면 만료 시각 없이 저장하며 덮어쓰기 시 기존 TTL도 지웁니다. 잘못된 JSON, 공백뿐인 키, 유효하지 않은 값 또는 TTL에는 `400 Bad Request`와 `application/problem+json` 응답을 반환합니다.
+
+```sh
+curl -i -X PUT http://localhost:8080/api/cache/demo \
+  -H 'Content-Type: application/json' -d '{"value":"hello"}'
+curl -i http://localhost:8080/api/cache/demo
+curl -i -X DELETE http://localhost:8080/api/cache/demo
+curl -i http://localhost:8080/api/cache/demo
+
+curl -i -X PUT http://localhost:8080/api/cache/temporary \
+  -H 'Content-Type: application/json' -d '{"value":"short-lived","ttlSeconds":2}'
+sleep 3
+curl -i http://localhost:8080/api/cache/temporary
+```
