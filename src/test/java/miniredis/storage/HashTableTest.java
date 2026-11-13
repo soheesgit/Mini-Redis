@@ -17,7 +17,7 @@ class HashTableTest {
 
     @Test
     void storesAndRetrievesANewKey() {
-        HashTable table = new HashTable(16);
+        HashTable<String> table = new HashTable<>(16);
 
         table.put("color", "blue");
 
@@ -26,7 +26,7 @@ class HashTableTest {
 
     @Test
     void overwritesAnEqualKeyWithoutLeavingAnOlderEntry() {
-        HashTable table = new HashTable(16);
+        HashTable<String> table = new HashTable<>(16);
         table.put("color", "blue");
 
         table.put(new String("color"), "green");
@@ -38,7 +38,7 @@ class HashTableTest {
 
     @Test
     void returnsNullForAMissingKeyEvenInANonEmptyBucket() {
-        HashTable table = new HashTable(1);
+        HashTable<String> table = new HashTable<>(1);
         table.put("present", "value");
 
         assertNull(table.get("missing"));
@@ -48,7 +48,7 @@ class HashTableTest {
 
     @Test
     void storesEmptyStrings() {
-        HashTable table = new HashTable(16);
+        HashTable<String> table = new HashTable<>(16);
 
         table.put("", "");
 
@@ -59,7 +59,7 @@ class HashTableTest {
 
     @Test
     void preservesOtherValuesWhenUpdatingACollidingKey() {
-        HashTable table = tableWithCollidingKeys();
+        HashTable<String> table = tableWithCollidingKeys();
 
         table.put("BB", "updated");
 
@@ -72,7 +72,7 @@ class HashTableTest {
     @ParameterizedTest
     @ValueSource(strings = {"C#", "BB", "Aa"})
     void removesHeadMiddleOrTailWithoutLosingNeighbors(String keyToRemove) {
-        HashTable table = tableWithCollidingKeys();
+        HashTable<String> table = tableWithCollidingKeys();
 
         assertEquals(keyToRemove + " value", table.remove(keyToRemove));
 
@@ -89,7 +89,7 @@ class HashTableTest {
     void handlesANegativeHashAndTheMinimumIntHash() {
         assertTrue("abcdef".hashCode() < 0);
         assertEquals(Integer.MIN_VALUE, "polygenelubricants".hashCode());
-        HashTable table = new HashTable(7);
+        HashTable<String> table = new HashTable<>(7);
 
         table.put("abcdef", "negative");
         table.put("polygenelubricants", "minimum");
@@ -103,12 +103,12 @@ class HashTableTest {
     @ParameterizedTest
     @ValueSource(ints = {0, -1})
     void rejectsNonPositiveBucketCounts(int bucketCount) {
-        assertThrows(IllegalArgumentException.class, () -> new HashTable(bucketCount));
+        assertThrows(IllegalArgumentException.class, () -> new HashTable<>(bucketCount));
     }
 
     @Test
     void rejectsNullKeysAndValues() {
-        HashTable table = new HashTable(16);
+        HashTable<String> table = new HashTable<>(16);
 
         assertThrows(NullPointerException.class, () -> table.put(null, "value"));
         assertThrows(NullPointerException.class, () -> table.put("key", null));
@@ -116,8 +116,8 @@ class HashTableTest {
         assertThrows(NullPointerException.class, () -> table.remove(null));
     }
 
-    private static HashTable tableWithCollidingKeys() {
-        HashTable table = new HashTable(16);
+    private static HashTable<String> tableWithCollidingKeys() {
+        HashTable<String> table = new HashTable<>(16);
         for (String key : COLLIDING_KEYS) {
             table.put(key, key + " value");
         }

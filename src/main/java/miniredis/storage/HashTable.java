@@ -3,14 +3,15 @@ package miniredis.storage;
 import java.util.Objects;
 
 /**
- * 문자열 키와 값을 저장하는 고정 크기 해시 테이블.
+ * 문자열 키와 값 객체를 저장하는 고정 크기 해시 테이블.
  * 같은 버킷에 배정된 엔트리는 단방향 연결 리스트로 관리한다.
- * 키와 값에는 {@code null}이 아닌 문자열을 사용한다.
+ * 키와 값은 {@code null}을 허용하지 않는다. 아래 C 주석은 문자열 값을 저장하는 예시다.
  */
-public final class HashTable {
+public final class HashTable<V> {
     // 각 배열 칸은 버킷의 첫 엔트리를 가리킨다. 빈 버킷은 null이다.
-    private final Entry[] buckets;
+    private final Entry<V>[] buckets;
 
+    @SuppressWarnings("unchecked")
     public HashTable(int bucketCount) {
         if (bucketCount <= 0) {
             throw new IllegalArgumentException("bucketCount must be positive");
@@ -19,15 +20,16 @@ public final class HashTable {
         // Entry **buckets = calloc(bucket_count, sizeof *buckets);
         // if (buckets == NULL) return NULL;
         // for (size_t i = 0; i < bucket_count; ++i) buckets[i] = NULL;
-        buckets = new Entry[bucketCount];
+        // 이 배열에는 이 테이블이 만든 Entry<V>만 저장한다.
+        buckets = (Entry<V>[]) new Entry<?>[bucketCount];
     }
 
     /** 키와 값을 저장한다. 같은 키가 있으면 기존 값을 덮어쓴다. */
-    public void put(String key, String value) {
+    public void put(String key, V value) {
         int index = bucketIndex(key);
         Objects.requireNonNull(value, "value");
 
-        Entry existing = findEntry(buckets[index], key);
+        Entry<V> existing = findEntry(buckets[index], key);
         // C의 put()은 입력 문자열을 복사해서 보관한다. 아래 예시는 void 함수 기준이다.
         // char *new_value = malloc(strlen(value) + 1);
         // if (new_value == NULL) return;
@@ -56,20 +58,20 @@ public final class HashTable {
         // strcpy(new_key, key);
         // *entry = (Entry){.key = new_key, .value = new_value, .next = buckets[index]};
         // buckets[index] = entry;
-        buckets[index] = new Entry(key, value, buckets[index]);
+        buckets[index] = new Entry<>(key, value, buckets[index]);
     }
 
     /** 해당 버킷에서 키를 찾아 값을 반환한다. 키가 없으면 {@code null}을 반환한다. */
-    public String get(String key) {
-        Entry entry = findEntry(buckets[bucketIndex(key)], key);
+    public V get(String key) {
+        Entry<V> entry = findEntry(buckets[bucketIndex(key)], key);
         return entry == null ? null : entry.value;
     }
 
     /** 키를 삭제하고 삭제된 값을 반환한다. 키가 없으면 {@code null}을 반환한다. */
-    public String remove(String key) {
+    public V remove(String key) {
         int index = bucketIndex(key);
-        Entry previous = null;
-        Entry current = buckets[index];
+        Entry<V> previous = null;
+        Entry<V> current = buckets[index];
 
         while (current != null) {
             if (current.key.equals(key)) {
@@ -102,9 +104,9 @@ public final class HashTable {
         return Math.floorMod(hash, buckets.length);
     }
 
-    private static Entry findEntry(Entry head, String key) {
+    private Entry<V> findEntry(Entry<V> head, String key) {
         // 같은 버킷에 여러 키가 있을 수 있으므로 키의 문자열 값을 비교한다.
-        for (Entry entry = head; entry != null; entry = entry.next) {
+        for (Entry<V> entry = head; entry != null; entry = entry.next) {
             if (entry.key.equals(key)) {
                 return entry;
             }
@@ -126,12 +128,12 @@ public final class HashTable {
     //     }
     // }
     // free(buckets);
-    private static final class Entry {
+    private static final class Entry<V> {
         private final String key;
-        private String value;
-        private Entry next;
+        private V value;
+        private Entry<V> next;
 
-        private Entry(String key, String value, Entry next) {
+        private Entry(String key, V value, Entry<V> next) {
             this.key = key;
             this.value = value;
             this.next = next;
