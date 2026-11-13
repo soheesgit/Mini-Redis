@@ -66,6 +66,8 @@ curl -i http://localhost:8080/api/cache/temporary
 
 ## 브라우저에서 테스트하기
 
+![Mini-Redis 테스트 화면의 상품 등록 폼, 등록된 상품 목록, API 응답, BYPASS · MISS · HIT 비교 결과](docs/images/cache-test.jpg)
+
 `./gradlew bootRun`으로 서버를 실행하고 [API 테스트 페이지](http://localhost:8080/cache-test.html)를 엽니다. **상품 등록하기**에서 상품 코드 `cola`, 상품명 `콜라`, 판매 시간 10초를 입력해 등록하면 `sale:cola` 키에 상품명 문자열 하나가 저장됩니다.
 
 등록이 성공하면 브라우저에 상품 코드와 상품명을 저장해 목록에 표시합니다. 새로고침하면 브라우저에 저장된 목록을 불러옵니다. TTL이 지난 뒤 **판매 상태 확인**을 누르면 서버가 404를 반환하고 해당 상품이 목록에서 빠집니다. 같은 상품 코드로 다시 등록하면 판매 시간이 새로 시작되며, **판매 종료**로 바로 삭제할 수 있습니다.
