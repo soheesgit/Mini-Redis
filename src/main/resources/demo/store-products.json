@@ -1,0 +1,22 @@
+[
+  {"code":"cola","name":"콜라","price":1800},
+  {"code":"sparkling-water","name":"탄산수","price":1200},
+  {"code":"iced-coffee","name":"아이스 커피","price":2200},
+  {"code":"banana-milk","name":"바나나 우유","price":1700},
+  {"code":"orange-juice","name":"오렌지 주스","price":2400},
+  {"code":"potato-chips","name":"감자칩","price":1700},
+  {"code":"pretzels","name":"프레첼","price":1600},
+  {"code":"chocolate","name":"초콜릿","price":1500},
+  {"code":"gummies","name":"젤리","price":1300},
+  {"code":"cookies","name":"쿠키","price":1900},
+  {"code":"tuna-rice-ball","name":"참치 삼각김밥","price":1500},
+  {"code":"kimchi-rice-ball","name":"김치 삼각김밥","price":1500},
+  {"code":"cup-noodles","name":"컵라면","price":1800},
+  {"code":"egg-sandwich","name":"계란 샌드위치","price":2900},
+  {"code":"chicken-lunchbox","name":"치킨 도시락","price":5400},
+  {"code":"hot-bar","name":"핫바","price":2100},
+  {"code":"boiled-eggs","name":"구운 계란","price":2000},
+  {"code":"yogurt","name":"요거트","price":1600},
+  {"code":"pudding","name":"푸딩","price":2200},
+  {"code":"ice-cream","name":"아이스크림","price":1800}
+]
