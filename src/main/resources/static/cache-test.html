@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mini-Redis API 테스트</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Inter, system-ui, sans-serif;
+            background: #f5f6f9;
+            color: #171c2b;
+        }
+
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        main { max-width: 1080px; margin: auto; padding: 44px 24px; }
+        h1 { margin: 0 0 24px; font-size: clamp(1.6rem, 4vw, 2.25rem); }
+        h2 { margin: 0 0 16px; font-size: 1.1rem; }
+        p { margin: 12px 0 0; line-height: 1.6; }
+        .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .controls { display: grid; gap: 16px; align-content: start; }
+        section {
+            min-width: 0;
+            padding: 22px;
+            border: 1px solid #dadee7;
+            border-radius: 12px;
+            background: #fff;
+        }
+        label { display: grid; gap: 6px; font-size: .9rem; font-weight: 650; }
+        .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+        input {
+            width: 100%;
+            padding: 9px 11px;
+            border: 1px solid #b9c2d2;
+            border-radius: 6px;
+            font: inherit;
+            font-weight: 400;
+        }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        button {
+            padding: 8px 12px;
+            border: 1px solid #b9c2d2;
+            border-radius: 6px;
+            background: #fff;
+            color: #171c2b;
+            font: inherit;
+            font-size: .875rem;
+            font-weight: 650;
+            cursor: pointer;
+        }
+        button:hover { background: #eef2fa; }
+        button:disabled { opacity: .55; cursor: wait; }
+        .primary { background: #254bb8; border-color: #254bb8; color: white; }
+        .primary:hover { background: #1d3b95; }
+        .hint { color: #47546a; font-size: .85rem; }
+        .comparison { margin-top: 16px; }
+        #comparison-status.error { color: #a52626; }
+        table { width: 100%; margin-top: 16px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+        th, td { padding: 9px 4px; border-bottom: 1px solid #dadee7; text-align: right; }
+        th:first-child { text-align: left; }
+        #sale-status { font-weight: 650; }
+        #sale-list { list-style: none; padding: 0; margin: 8px 0 0; max-height: 18rem; overflow: auto; }
+        #sale-list li { border-top: 1px solid #dadee7; padding: 8px 0; }
+        #sale-list button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+        .response { background: #161e31; color: #f0f4fc; border-color: #161e31; }
+        .response h2 { margin-bottom: 10px; }
+        #request { margin: 0; color: #bcc9df; overflow-wrap: anywhere; }
+        #status { font-weight: 650; color: #a7d7ff; }
+        #status.error { color: #ffb1b1; }
+        pre {
+            margin: 12px 0 0;
+            padding-top: 12px;
+            border-top: 1px solid #46546c;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            line-height: 1.55;
+        }
+        @media (max-width: 720px) {
+            main { padding: 24px 16px; }
+            .layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 380px) {
+            .fields { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Mini-Redis API 테스트</h1>
+    <div class="layout">
+        <div class="controls">
+            <section aria-labelledby="sale-heading">
+                <h2 id="sale-heading">상품 등록하기</h2>
+                <form id="sale-form">
+                    <div class="fields">
+                        <label>상품 코드 <input id="product-code" value="cola" pattern="[a-z0-9]+(-[a-z0-9]+)*" required aria-describedby="sale-hint"></label>
+                        <label>상품명 <input id="product-name" value="콜라" required></label>
+                        <label>판매 시간 (초) <input id="ttl" type="number" min="1" max="9007199254740991" step="1" value="10" required></label>
+                    </div>
+                    <div class="actions">
+                        <button type="submit" class="primary">등록하기</button>
+                        <button type="button" id="get">판매 상태 확인</button>
+                        <button type="button" id="delete">판매 종료</button>
+                    </div>
+                </form>
+                <p class="hint" id="sale-hint">상품 코드는 영문 소문자와 숫자를 쓰고 하이픈으로 연결할 수 있어요. 같은 코드로 다시 등록하면 판매 시간이 새로 시작돼요.</p>
+                <p id="sale-status" role="status"></p>
+            </section>
+            <section aria-labelledby="sale-list-heading">
+                <h2 id="sale-list-heading">등록된 상품</h2>
+                <button type="button" id="seed-sales" aria-describedby="seed-sales-hint">예제 상품 채우기</button>
+                <p id="seed-sales-hint" class="hint">편의점 예제 상품을 60초 동안 판매 목록에 올려요.</p>
+                <p id="seed-sales-status" role="status"></p>
+                <p class="hint" id="sale-list-note">등록한 상품은 이 브라우저에 표시돼요. 상품을 선택하고 판매 상태를 확인하면 만료 여부를 알 수 있어요.</p>
+                <p id="sale-list-status" class="hint">등록된 상품이 없어요.</p>
+                <ul id="sale-list" aria-describedby="sale-list-note"></ul>
+            </section>
+        </div>
+        <section class="response" aria-labelledby="response-heading" aria-live="polite" aria-atomic="true">
+            <h2 id="response-heading">API 응답</h2>
+            <p id="request"></p>
+            <p id="status">버튼을 누르면 결과가 여기에 표시돼요.</p>
+            <pre id="body" hidden></pre>
+        </section>
+    </div>
+    <section class="comparison" aria-labelledby="comparison-heading">
+        <h2 id="comparison-heading">편의점 상품 성능 비교</h2>
+        <div class="actions">
+            <button type="button" id="seed" class="primary">상품 데이터 채우기</button>
+            <button type="button" id="compare" disabled>BYPASS · MISS · HIT 성능 비교</button>
+        </div>
+        <p id="comparison-status" class="hint" role="status">예제 상품을 Mini-Redis에 채운 뒤, 같은 상품들을 조건별로 한 번씩 조회해요.</p>
+        <table id="comparison-results" aria-label="상품 조회 응답 시간" hidden>
+            <thead>
+                <tr><th scope="col">조건</th><th scope="col">평균 (ms)</th><th scope="col">중앙값 (ms)</th></tr>
+            </thead>
+            <tbody>
+                <tr><th scope="row">BYPASS</th><td id="bypass-mean"></td><td id="bypass-median"></td></tr>
+                <tr><th scope="row">MISS</th><td id="miss-mean"></td><td id="miss-median"></td></tr>
+                <tr><th scope="row">HIT</th><td id="hit-mean"></td><td id="hit-median"></td></tr>
+            </tbody>
+        </table>
+        <p class="hint">브라우저가 요청을 보내고 응답 본문을 다 읽을 때까지 재요. MISS를 준비하는 삭제 요청은 시간에서 제외해요.</p>
+    </section>
+</main>
+<script>
+    const saleForm = document.querySelector('#sale-form');
+    const codeInput = document.querySelector('#product-code');
+    const nameInput = document.querySelector('#product-name');
+    const ttlInput = document.querySelector('#ttl');
+    const saleStatus = document.querySelector('#sale-status');
+    const saleList = document.querySelector('#sale-list');
+    const saleListStatus = document.querySelector('#sale-list-status');
+    const seedSalesStatus = document.querySelector('#seed-sales-status');
+    const saleIndexKey = 'mini-redis:sale-keys';
+    const sales = loadSales();
+    const requestOutput = document.querySelector('#request');
+    const statusOutput = document.querySelector('#status');
+    const bodyOutput = document.querySelector('#body');
+    const comparisonStatus = document.querySelector('#comparison-status');
+    const comparisonResults = document.querySelector('#comparison-results');
+    const compareButton = document.querySelector('#compare');
+    const catalogPath = '/api/store/products';
+    const catalogCacheTtl = 30;
+    const sampleSalePrefix = 'sale:sample:';
+    const sampleSaleTtl = 60;
+
+    let comparisonCodes = [];
+    let busy = false;
+    let selectedSaleKey;
+
+    function setBusy(value) {
+        busy = value;
+        document.querySelectorAll('button').forEach(button => { button.disabled = value; });
+        compareButton.disabled = value || !comparisonCodes.length;
+    }
+
+    async function sendRequest(method, path, payload) {
+        if (busy) return;
+        requestOutput.textContent = method + ' ' + path;
+        statusOutput.textContent = '요청 중…';
+        statusOutput.classList.remove('error');
+        bodyOutput.hidden = true;
+        bodyOutput.textContent = '';
+        setBusy(true);
+
+        try {
+            const options = { method };
+            if (payload !== undefined) {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify(payload);
+            }
+
+            const startedAt = performance.now();
+            const response = await fetch(path, options);
+            const body = await response.text();
+            const elapsed = performance.now() - startedAt;
+            const cacheStatus = response.headers.get('X-Cache');
+            statusOutput.textContent = 'HTTP ' + response.status + (cacheStatus ? ' · X-Cache ' + cacheStatus : '');
+            statusOutput.textContent += ' · ' + elapsed.toFixed(2) + ' ms';
+            statusOutput.classList.toggle('error', !response.ok);
+            if (body) {
+                bodyOutput.textContent = formatBody(body);
+                bodyOutput.hidden = false;
+            } else {
+                statusOutput.textContent += ' · 응답 본문 없음';
+            }
+            return { status: response.status, body };
+        } catch {
+            statusOutput.textContent = '요청에 실패했어요. Mini-Redis 서버가 실행 중인지 확인하세요.';
+            statusOutput.classList.add('error');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function measureProduct(path, expectedStatus) {
+        const startedAt = performance.now();
+        const response = await fetch(path, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+        const body = await response.text();
+        const elapsed = performance.now() - startedAt;
+        const actualStatus = response.headers.get('X-Cache') ?? '없음';
+        if (!response.ok || actualStatus !== expectedStatus) {
+            throw new Error(expectedStatus + ' 측정 중 HTTP ' + response.status + ' · X-Cache ' + actualStatus + ' 응답을 받았어요.');
+        }
+        return { body, elapsed };
+    }
+
+    function catalogProductPath(code) {
+        return catalogPath + '/' + encodeURIComponent(code);
+    }
+
+    function catalogCachePath(code) {
+        return '/api/cache/' + encodeURIComponent('store:product:' + code);
+    }
+
+    async function fetchCatalog() {
+        const response = await fetch(catalogPath, { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) throw new Error('상품 목록 HTTP ' + response.status);
+        const catalog = await response.json();
+        if (!catalog.length) throw new Error('예제 상품이 비어 있어요.');
+        return catalog;
+    }
+
+    async function putCache(path, value, ttlSeconds) {
+        const response = await fetch(path, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value, ttlSeconds }),
+            signal: AbortSignal.timeout(5000)
+        });
+        if (response.status !== 204) throw new Error(path + ' 저장 HTTP ' + response.status);
+    }
+
+    async function seedComparisonData() {
+        if (busy) return;
+        comparisonCodes = [];
+        setBusy(true);
+        comparisonResults.hidden = true;
+        comparisonStatus.classList.remove('error');
+        comparisonStatus.textContent = '편의점 상품 목록을 불러오는 중…';
+        let saved = 0;
+
+        try {
+            const catalog = await fetchCatalog();
+            for (const { code } of catalog) {
+                const { body } = await measureProduct(catalogProductPath(code) + '?cached=false', 'BYPASS');
+                await putCache(catalogCachePath(code), body, catalogCacheTtl);
+                saved++;
+                comparisonStatus.textContent = '상품 저장 중 ' + saved + ' / ' + catalog.length;
+            }
+            comparisonCodes = catalog.map(({ code }) => code);
+            comparisonStatus.textContent = '상품 ' + saved + '개 저장 완료';
+        } catch (error) {
+            comparisonStatus.textContent = '데이터 채우기 실패 (' + saved + '개 저장) · ' + error.message;
+            comparisonStatus.classList.add('error');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function measureCachePair(code) {
+        const response = await fetch(catalogCachePath(code), { method: 'DELETE', signal: AbortSignal.timeout(5000) });
+        await response.text();
+        if (response.status !== 204 && response.status !== 404) {
+            throw new Error('상품 캐시 삭제 중 HTTP ' + response.status + ' 응답을 받았어요.');
+        }
+        const path = catalogProductPath(code);
+        const miss = await measureProduct(path, 'MISS');
+        const hit = await measureProduct(path, 'HIT');
+        return { miss, hit };
+    }
+
+    function showTimes(mode, samples) {
+        const sorted = [...samples].sort((left, right) => left - right);
+        const middle = Math.floor(sorted.length / 2);
+        const median = sorted.length % 2 === 0
+            ? (sorted[middle - 1] + sorted[middle]) / 2
+            : sorted[middle];
+        const mean = samples.reduce((total, sample) => total + sample, 0) / samples.length;
+        document.querySelector('#' + mode + '-mean').textContent = mean.toFixed(2);
+        document.querySelector('#' + mode + '-median').textContent = median.toFixed(2);
+    }
+
+    async function compareTimes() {
+        if (busy || !comparisonCodes.length) return;
+        const count = comparisonCodes.length;
+        const samples = { bypass: [], miss: [], hit: [] };
+        setBusy(true);
+        comparisonResults.hidden = true;
+        comparisonStatus.classList.remove('error');
+        comparisonStatus.textContent = '준비 요청을 보내고 있어요…';
+
+        try {
+            const firstCode = comparisonCodes[0];
+            await measureProduct(catalogProductPath(firstCode) + '?cached=false', 'BYPASS');
+            await measureCachePair(firstCode);
+
+            for (let index = 0; index < count; index++) {
+                const code = comparisonCodes[index];
+                const originPath = catalogProductPath(code) + '?cached=false';
+                comparisonStatus.textContent = '측정 중 ' + (index + 1) + ' / ' + count;
+                // MISS 뒤에 HIT를 실행하고 BYPASS의 위치는 번갈아 바꾼다.
+                const earlyBypass = index % 2 === 0 ? await measureProduct(originPath, 'BYPASS') : null;
+                const { miss, hit } = await measureCachePair(code);
+                const bypass = earlyBypass ?? await measureProduct(originPath, 'BYPASS');
+
+                if (miss.body !== bypass.body || hit.body !== bypass.body) {
+                    throw new Error('세 응답의 본문이 달라 측정을 중단했어요.');
+                }
+                samples.bypass.push(bypass.elapsed);
+                samples.miss.push(miss.elapsed);
+                samples.hit.push(hit.elapsed);
+            }
+
+            for (const [mode, times] of Object.entries(samples)) {
+                showTimes(mode, times);
+            }
+            comparisonResults.hidden = false;
+            comparisonStatus.textContent = '측정 완료 · 조건별 ' + count + '회';
+        } catch (error) {
+            comparisonStatus.textContent = '비교 실패 · ' + error.message;
+            comparisonStatus.classList.add('error');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    function formatBody(body) {
+        try {
+            return JSON.stringify(JSON.parse(body), null, 2);
+        } catch {
+            return body;
+        }
+    }
+
+    function loadSales() {
+        const sales = new Map();
+        try {
+            const entries = JSON.parse(localStorage.getItem(saleIndexKey));
+            if (Array.isArray(entries)) {
+                for (const entry of entries) {
+                    // 이전 화면은 키만 저장했다. 사용자가 조회하면 상품명을 채운다.
+                    const [key, value] = Array.isArray(entry) ? entry : [entry, null];
+                    if (typeof key === 'string' && /^sale:(?:[a-z]+:)?[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key)) {
+                        sales.set(key, typeof value === 'string' ? value : null);
+                    }
+                }
+            }
+        } catch {
+            // 브라우저 저장소에 접근할 수 없어도 현재 페이지에서 목록을 관리한다.
+        }
+        return sales;
+    }
+
+    function saveSales() {
+        try {
+            localStorage.setItem(saleIndexKey, JSON.stringify([...sales]));
+        } catch {
+            // 현재 페이지의 목록은 메모리에 남아 있다.
+        }
+    }
+
+    function salePath(key) {
+        return '/api/cache/' + encodeURIComponent(key);
+    }
+
+    async function seedSales() {
+        if (busy) return;
+        setBusy(true);
+        seedSalesStatus.textContent = '예제 상품을 등록하는 중…';
+        let saved = 0;
+        try {
+            const catalog = await fetchCatalog();
+            for (const { code, name } of catalog) {
+                const key = sampleSalePrefix + code;
+                await putCache(salePath(key), name, sampleSaleTtl);
+                sales.set(key, name);
+                saved++;
+            }
+            seedSalesStatus.textContent = '예제 상품 ' + saved + '개 등록 완료 · ' + sampleSaleTtl + '초 판매';
+        } catch (error) {
+            seedSalesStatus.textContent = '예제 상품 채우기 실패 (' + saved + '개 등록) · ' + error.message;
+        } finally {
+            setBusy(false);
+            if (saved) updateSaleList();
+        }
+    }
+
+    function updateSaleList() {
+        saveSales();
+        renderSales();
+    }
+
+    function renderSales() {
+        const focusedKey = saleList.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+        const items = [...sales].map(([key, value]) => {
+            const code = key.slice(key.lastIndexOf(':') + 1);
+            const item = document.createElement('li');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.disabled = busy;
+            button.dataset.key = key;
+            const label = value === null ? code : value + ' (' + code + ')';
+            button.textContent = (key.startsWith(sampleSalePrefix) ? '예제 · ' : '') + label;
+            button.addEventListener('click', () => {
+                selectedSaleKey = key;
+                codeInput.value = code;
+                nameInput.value = value ?? '';
+                nameInput.setCustomValidity('');
+                saleStatus.textContent = '';
+            });
+            item.append(button);
+            return item;
+        });
+        saleList.replaceChildren(...items);
+        saleListStatus.textContent = items.length ? '' : '등록된 상품이 없어요.';
+        if (focusedKey) items.find(item => item.firstChild.dataset.key === focusedKey)?.firstChild.focus();
+    }
+
+    async function runSale(method, payload) {
+        if (busy || !codeInput.reportValidity()) return;
+        const key = selectedSaleKey ?? 'sale:' + codeInput.value;
+        saleStatus.textContent = '';
+        const result = await sendRequest(method, salePath(key), payload);
+        if (method === 'PUT' && result?.status === 204) {
+            sales.set(key, payload.value);
+            updateSaleList();
+            saleStatus.textContent = '등록 완료 · ' + payload.value + ' · ' + payload.ttlSeconds + '초 판매';
+        } else if (result?.status === 404 || (method === 'DELETE' && result?.status === 204)) {
+            if (sales.delete(key)) updateSaleList();
+            if (selectedSaleKey === key) selectedSaleKey = undefined;
+            saleStatus.textContent = result.status === 404 ? '판매 종료 또는 미등록' : '판매를 종료했어요.';
+        } else if (method === 'GET' && result?.status === 200) {
+            const { value } = JSON.parse(result.body);
+            if (sales.has(key) && sales.get(key) !== value) {
+                sales.set(key, value);
+                updateSaleList();
+            }
+            saleStatus.textContent = '판매 중 · ' + value;
+        }
+    }
+
+    codeInput.addEventListener('input', () => { selectedSaleKey = undefined; });
+    nameInput.addEventListener('input', () => nameInput.setCustomValidity(''));
+    saleForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const value = nameInput.value.trim();
+        nameInput.setCustomValidity(value ? '' : '상품명을 입력하세요.');
+        if (!nameInput.reportValidity()) return;
+        runSale('PUT', { value, ttlSeconds: ttlInput.valueAsNumber });
+    });
+    document.querySelector('#get').addEventListener('click', () => runSale('GET'));
+    document.querySelector('#delete').addEventListener('click', () => runSale('DELETE'));
+    document.querySelector('#seed-sales').addEventListener('click', seedSales);
+    renderSales();
+    document.querySelector('#seed').addEventListener('click', seedComparisonData);
+    compareButton.addEventListener('click', compareTimes);
+</script>
+</body>
+</html>
