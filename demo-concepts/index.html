@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>데이터 흐름 시안 10장</title><link rel="stylesheet" href="base.css">
+<style>
+.list { padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+a.card { display: block; border: 1px solid var(--g2); padding: 12px; text-decoration: none; color: var(--g); }
+a.card:hover { border-color: var(--a); box-shadow: 0 0 12px rgba(255,181,71,.3); }
+a.card b { color: var(--a); font-weight: normal; }
+a.card p { margin: 6px 0 0; color: var(--dim); font-size: 12px; }
+.note { padding: 0 14px; color: var(--dim); }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">미니 Redis 데이터 흐름 — 검은 화면 시안 10장</h1></div>
+<p class="note">모두 실제 데모 서버에서 기록한 요청 6개(SET apple ttl=60 → GET apple → SET banana/cherry/grape(리해싱 4→8) → INCR counter)를 재생한다. Space 멈춤, → 다음 요청.</p>
+<div class="list">
+  <a class="card" href="01-terminal-log.html"><b>01</b> 터미널 로그<p>tail -f처럼 한 줄씩 타자. 구간마다 실제 바이트</p></a>
+  <a class="card" href="02-packet-map.html"><b>02</b> 패킷 네트워크 맵<p>노드 사이를 빛나는 패킷이 이동</p></a>
+  <a class="card" href="03-wireshark.html"><b>03</b> 패킷 캡처(와이어샤크)<p>메시지 목록 · 해석 · hexdump 3단</p></a>
+  <a class="card" href="04-byte-pipe.html"><b>04</b> 바이트 파이프<p>16진수 바이트가 관을 타고 흐르며 모양이 바뀜</p></a>
+  <a class="card" href="05-logic-analyzer.html"><b>05</b> 로직 애널라이저<p>스레드별 신호선, 실제 µs 시각의 펄스</p></a>
+  <a class="card" href="06-memory-dump.html"><b>06</b> 메모리 덤프<p>버킷 배열 → Node → Entry 포인터, 바뀐 줄 강조</p></a>
+  <a class="card" href="07-matrix-hash.html"><b>07</b> 매트릭스 해시<p>키 바이트 → SipHash → 아래 비트 → 칸</p></a>
+  <a class="card" href="08-tmux.html"><b>08</b> tmux 4분할<p>클라이언트 · 서버 로그 · 버킷 · AOF xxd 동시에</p></a>
+  <a class="card" href="09-circuit.html"><b>09</b> 회로 기판<p>칩과 배선, 0과 1이 배선을 타고 흐름</p></a>
+  <a class="card" href="10-hud.html"><b>10</b> 관제 HUD<p>원형 버킷 레이더에 요청이 꽂힘, 계기판</p></a>
+</div>
+</body></html>

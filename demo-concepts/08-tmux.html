@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 tmux 4분할</title><link rel="stylesheet" href="base.css">
+<style>
+.panes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: calc(100vh - 74px); gap: 1px; background: var(--line); }
+@media (max-width: 760px) { .panes { grid-template-columns: 1fr; grid-template-rows: repeat(4, 46vh); height: auto; } }
+.pane { background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+.pane h2 { margin: 0; font-size: 11px; font-weight: normal; padding: 3px 8px; background: #0b2414; color: var(--g); }
+.pane.act h2 { background: var(--g2); color: #000; }
+.body { flex: 1; overflow: auto; padding: 6px 8px; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
+.grid { white-space: pre; }
+.hl { color: #000; background: var(--a); }
+.status { position: fixed; left: 0; right: 0; bottom: 0; background: var(--g2); color: #000; font-size: 11px; padding: 2px 8px; }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">08 · tmux: 4 terminals</h1><span class="sub">왼쪽 위 클라이언트가 보내면, 서버 로그·메모리·AOF 파일이 동시에 움직인다</span></div>
+<div class="panes">
+  <div class="pane" id="p1"><h2>0: client — zsh</h2><div class="body" id="c"></div></div>
+  <div class="pane" id="p2"><h2>1: miniredis — server log</h2><div class="body" id="s"></div></div>
+  <div class="pane" id="p3"><h2>2: watch -n0.1 'DEBUG BUCKETS keys'</h2><div class="body grid" id="m"></div></div>
+  <div class="pane" id="p4"><h2>3: tail -f data/incr.1.aof | xxd</h2><div class="body" id="a"></div></div>
+</div>
+<div class="status">[miniredis] 0:client 1:server* 2:buckets 3:aof    Space 멈춤 · → 다음 요청   <span id="cnt"></span></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const act = (p) => document.querySelectorAll('.pane').forEach((x) => x.classList.toggle('act', x.id === p));
+function add(id, text, cls) { const d = document.createElement('div'); d.textContent = text; if (cls) d.className = cls; $(id).append(d); $(id).scrollTop = 1e9; return d; }
+let aofOff = 0;
+function grid(snap, hot) {
+  const K = snap.keys, row = (name, ch) => `${name}\n` + ch.map((c, i) => `[${String(i).padStart(2)}] ${c.length ? c.map((n) => n.k).join(' -> ') + ' -> nil' : '.'}`).join('\n');
+  return row('table[0]' + (K.size1 ? ' (old, rehashIndex=' + K.rehashIndex + ')' : ''), K.t0) + (K.size1 ? '\n\n' + row('table[1] (new)', K.t1) : '') + `\n\nkeys=${snap.count} mem=${snap.memory}B`;
+}
+player(async (r, wait) => {
+  $('cnt').textContent = `요청 #${r.id}`;
+  act('p1');
+  const cmd = `$ curl -X ${r.method} 127.0.0.1:8090${r.path}${r.value ? ` -d ${r.value}` : ''}`;
+  const d = add('c', '');
+  for (let i = 0; i <= cmd.length; i++) { d.textContent = cmd.slice(0, i); await wait(18); }
+  for (const h of r.hops) {
+    if (h.from === 'CLIENT' || h.to === 'DISK') continue;
+    act('p2'); add('s', `+${TR.us(h.t).padStart(8)}µs ${h.from}→${h.to} ${h.label}`);
+    if (h.to === 'MEMORY' && r.snap) { act('p3'); $('m').textContent = grid(r.snap); }
+    if (h.to === 'AOF') {
+      act('p4');
+      const b = h.data.split(' ');
+      for (let i = 0; i < b.length; i += 16) {
+        const c = b.slice(i, i + 16);
+        add('a', `${(aofOff + i).toString(16).padStart(8, '0')}: ${c.join('').replace(/(....)/g, '$1 ').padEnd(40)} ${c.map((x) => { const v = parseInt(x, 16); return v >= 32 && v < 127 ? String.fromCharCode(v) : '.'; }).join('')}`, 'hl');
+        await wait(120);
+      }
+      aofOff += b.length;
+      $('a').querySelectorAll('.hl').forEach((x) => (x.className = ''));
+    }
+    if (h.to === 'CLIENT') { act('p1'); add('c', r.hops.find((x) => x.to === 'CLIENT').data.split('\r\n\r\n')[1] || ''); add('c', `(HTTP ${r.status})`, 'dm'); }
+    await wait(650);
+  }
+}, { gap: 900 });
+</script></body></html>

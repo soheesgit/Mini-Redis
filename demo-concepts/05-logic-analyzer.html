@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 로직 애널라이저</title><link rel="stylesheet" href="base.css">
+<style>
+canvas { display: block; width: 100%; height: 60vh; }
+#info { padding: 8px 14px 60px; white-space: pre-wrap; color: var(--c); }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">05 · logic analyzer</h1><span class="sub">스레드마다 신호선 1줄. 실제 µs 시각 그대로 펄스가 튄다 — 누가 언제 일하는지 보인다</span></div>
+<canvas id="cv"></canvas>
+<div id="info"></div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const LANES = ['CLIENT', 'HANDLER', 'QUEUE', 'EXECUTOR', 'MEMORY', 'AOF', 'DISK'];
+const cv = document.getElementById('cv'), g = cv.getContext('2d');
+function size() { cv.width = cv.clientWidth * devicePixelRatio; cv.height = cv.clientHeight * devicePixelRatio; g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); }
+addEventListener('resize', size); size();
+function draw(r, upto, cursorT) {
+  const W = cv.clientWidth, H = cv.clientHeight, L = 92, top = 16, lh = (H - top - 26) / LANES.length;
+  g.clearRect(0, 0, W, H);
+  const hops = r.hops.filter((h) => h.to !== 'DISK'); // fsync는 수백 ms 뒤라 따로 표시
+  const t0 = hops[0].t, t1 = hops[hops.length - 1].t, span = Math.max(1, t1 - t0);
+  const x = (t) => L + 10 + ((t - t0) / span) * (W - L - 40);
+  g.font = '12px ui-monospace, Menlo, monospace';
+  LANES.forEach((ln, i) => {
+    const y = top + i * lh + lh / 2;
+    g.fillStyle = '#4b6b57'; g.fillText(ln, 8, y + 4);
+    g.strokeStyle = '#12301d'; g.beginPath(); g.moveTo(L, y + 10); g.lineTo(W - 10, y + 10); g.stroke();
+  });
+  hops.slice(0, upto).forEach((h) => {
+    for (const ln of [h.from, h.to]) {
+      const i = LANES.indexOf(ln === 'SOCKET' ? 'HANDLER' : ln); if (i < 0) continue;
+      const y = top + i * lh + lh / 2, xx = x(h.t);
+      g.strokeStyle = ln === h.to ? '#39ff7a' : '#1d8f44'; g.lineWidth = 2; g.shadowColor = '#39ff7a'; g.shadowBlur = 6;
+      g.beginPath(); g.moveTo(xx - 6, y + 10); g.lineTo(xx - 6, y - 8); g.lineTo(xx + 6, y - 8); g.lineTo(xx + 6, y + 10); g.stroke();
+      g.shadowBlur = 0; g.lineWidth = 1;
+    }
+    const a = LANES.indexOf(h.from === 'SOCKET' ? 'HANDLER' : h.from), b = LANES.indexOf(h.to);
+    if (a >= 0 && b >= 0 && a !== b) { g.strokeStyle = '#ffb547'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x(h.t), top + a * lh + lh / 2); g.lineTo(x(h.t), top + b * lh + lh / 2); g.stroke(); g.setLineDash([]); }
+  });
+  g.fillStyle = '#4b6b57';
+  g.fillText(`0µs`, L + 4, H - 6); g.fillText(`${Math.round(span / 1000)}µs`, W - 70, H - 6);
+  if (cursorT != null) { g.strokeStyle = '#4fd8ff'; g.beginPath(); g.moveTo(x(cursorT), top); g.lineTo(x(cursorT), H - 20); g.stroke(); }
+}
+player(async (r, wait) => {
+  document.getElementById('cnt').textContent = `요청 #${r.id} ${r.method} ${r.path}`;
+  const hops = r.hops.filter((h) => h.to !== 'DISK');
+  for (let i = 1; i <= hops.length; i++) {
+    draw(r, i, hops[i - 1].t);
+    const h = hops[i - 1];
+    document.getElementById('info').textContent = `t=+${TR.us(h.t)}µs  ${h.from} → ${h.to}  ${h.label}\n# ${h.note}`;
+    await wait(900);
+  }
+  const fs = r.hops.find((h) => h.to === 'DISK');
+  if (fs) { document.getElementById('info').textContent += `\n\n(그리고 ${Math.round((fs.t - hops[0].t) / 1000)}ms 뒤) AOF → DISK  ${fs.label}  — 응답은 이걸 기다리지 않는다`; await wait(1500); }
+});
+</script></body></html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 매트릭스 해시</title><link rel="stylesheet" href="base.css">
+<style>
+canvas#rain { position: fixed; inset: 0; z-index: 0; opacity: .35; }
+.stage { position: relative; z-index: 1; padding: 20px 14px 70px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.key { font-size: 28px; letter-spacing: 6px; color: #d8ffe6; text-shadow: 0 0 10px var(--g); min-height: 40px; }
+.bytes, .bits { font-size: 15px; color: var(--c); word-break: break-all; text-align: center; max-width: 900px; min-height: 22px; }
+.box { border: 1px solid var(--g); padding: 10px 26px; box-shadow: 0 0 16px rgba(57,255,122,.35); background: rgba(0,0,0,.6); }
+.hash { font-size: 22px; color: var(--a); text-shadow: 0 0 8px var(--a); min-height: 30px; }
+.low { color: #000; background: var(--a); }
+.buckets { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.bk { width: 64px; height: 64px; border: 1px solid var(--g2); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; background: rgba(0,0,0,.6); }
+.bk.hit { border-color: var(--a); box-shadow: 0 0 20px var(--a); color: var(--a); transform: scale(1.12); }
+.bk i { font-style: normal; color: var(--dim); }
+.cap { color: var(--dim); font-size: 12px; text-align: center; }
+</style></head>
+<body>
+<canvas id="rain"></canvas>
+<div class="title" style="position:relative;z-index:1"><h1 class="glow">07 · hash → bucket</h1><span class="sub">키 바이트가 SipHash 상자로 떨어지고, 64비트 결과의 아래 비트가 칸 번호가 된다</span></div>
+<div class="stage">
+  <div class="key" id="k"></div>
+  <div class="bytes" id="b"></div>
+  <div class="box">SipHash-2-4 ( key , secret seed[16] )</div>
+  <div class="hash" id="h"></div>
+  <div class="bits" id="bits"></div>
+  <div class="cap" id="cap"></div>
+  <div class="buckets" id="bk"></div>
+</div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const cv = document.getElementById('rain'), g = cv.getContext('2d');
+let cols = [];
+function size() { cv.width = innerWidth; cv.height = innerHeight; cols = Array(Math.ceil(innerWidth / 14)).fill(0).map(() => Math.random() * innerHeight); }
+addEventListener('resize', size); size();
+(function rain() { g.fillStyle = 'rgba(5,8,10,.12)'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#39ff7a'; g.font = '13px monospace';
+  cols.forEach((y, i) => { g.fillText('0123456789abcdef'[Math.floor(Math.random() * 16)], i * 14, y); cols[i] = y > cv.height + Math.random() * 400 ? 0 : y + 14; }); requestAnimationFrame(rain); })();
+const $ = (id) => document.getElementById(id);
+async function typeTo(el, text, wait, step = 1, ms = 25) { for (let i = 0; i < text.length; i += step) { el.textContent = text.slice(0, i); await wait(ms); } el.textContent = text; }
+player(async (r, wait) => {
+  if (!r.end || !r.end.loc) return;
+  const L = r.end.loc, t = L.table >= 0 ? L.table : 0, size = t ? L.size1 : L.size0, idx = t ? L.idx1 : L.idx0, bits = Math.log2(size);
+  $('cnt').textContent = `요청 #${r.id} ${r.end.cmd} ${r.end.key}`;
+  ['k', 'b', 'h', 'bits', 'cap'].forEach((i) => ($(i).textContent = ''));
+  $('bk').textContent = '';
+  await typeTo($('k'), r.end.key, wait, 1, 90);
+  await typeTo($('b'), TR.hex(r.end.key), wait, 3, 30);
+  await wait(400);
+  await typeTo($('h'), '0x' + L.hash, wait, 1, 40);
+  const bin = BigInt('0x' + L.hash).toString(2).padStart(64, '0');
+  $('bits').innerHTML = '';
+  $('bits').append(bin.slice(0, 64 - bits));
+  const low = document.createElement('span'); low.className = 'low'; low.textContent = bin.slice(64 - bits); $('bits').append(low);
+  $('cap').textContent = `칸이 ${size}개 → 아래 ${bits}비트 ${bin.slice(64 - bits)}₂ = ${idx}번 칸${t ? ' (리해싱 중: 새 테이블)' : ''}`;
+  const chains = (t ? r.snap.keys.t1 : r.snap.keys.t0) || [];
+  for (let i = 0; i < size; i++) {
+    const d = document.createElement('div'); d.className = 'bk';
+    d.innerHTML = `<i>[${i}]</i>`; const s = document.createElement('span'); s.textContent = (chains[i] || []).map((n) => n.k).join(' → '); d.append(s);
+    $('bk').append(d);
+  }
+  await wait(500);
+  $('bk').children[idx].classList.add('hit');
+  await wait(2200);
+}, { gap: 400 });
+</script></body></html>

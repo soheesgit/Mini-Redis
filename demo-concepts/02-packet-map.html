@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 패킷 네트워크 맵</title><link rel="stylesheet" href="base.css">
+<style>
+svg { width: 100%; height: auto; display: block; max-height: 62vh; }
+.node rect { fill: #07140c; stroke: var(--g2); stroke-width: 1.5; rx: 6; }
+.node text { fill: var(--g); font: 13px ui-monospace, Menlo, monospace; text-anchor: middle; }
+.node .s { fill: var(--dim); font-size: 10px; }
+.node.on rect { stroke: var(--a); fill: #1a1405; filter: drop-shadow(0 0 8px var(--a)); }
+.wire { stroke: var(--line); stroke-width: 2; }
+.wire.on { stroke: var(--g); filter: drop-shadow(0 0 4px var(--g)); }
+.pkt circle { fill: var(--a); filter: drop-shadow(0 0 8px var(--a)); }
+.pkt text { fill: var(--a); font: 12px ui-monospace, Menlo, monospace; text-anchor: middle; }
+#log { padding: 8px 14px 60px; white-space: pre-wrap; word-break: break-all; }
+#log .cur { color: var(--wh, #d8ffe6); }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">02 · packet map</h1><span class="sub">빛나는 패킷이 실제 경로를 따라 이동한다. 패킷 위 글자 = 그 구간에서 오간 내용</span></div>
+<svg viewBox="0 0 1000 330" id="map"></svg>
+<div id="log"></div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const P = { CLIENT: [80, 70], SOCKET: [260, 70], HANDLER: [440, 70], QUEUE: [620, 70], EXECUTOR: [820, 70], MEMORY: [820, 250], AOF: [560, 250], DISK: [300, 250] };
+const SUB = { CLIENT: 'browser', SOCKET: 'tcp :8090', HANDLER: 'virtual thread', QUEUE: 'ArrayBlockingQueue', EXECUTOR: 'single thread', MEMORY: 'hash table', AOF: 'incr.1.aof', DISK: 'fsync 1s' };
+const WIRES = [['CLIENT', 'SOCKET'], ['SOCKET', 'HANDLER'], ['HANDLER', 'QUEUE'], ['QUEUE', 'EXECUTOR'], ['EXECUTOR', 'MEMORY'], ['EXECUTOR', 'AOF'], ['AOF', 'DISK'], ['EXECUTOR', 'HANDLER'], ['HANDLER', 'CLIENT']];
+const svg = document.getElementById('map'), NS = 'http://www.w3.org/2000/svg';
+const el = (t, a, p = svg) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); p.append(e); return e; };
+const wires = {};
+for (const [a, b] of WIRES) { const k = [a, b].sort().join('-'); if (!wires[k]) wires[k] = el('line', { class: 'wire', x1: P[a][0], y1: P[a][1], x2: P[b][0], y2: P[b][1] }); }
+const nodes = {};
+for (const n in P) { const g = el('g', { class: 'node' }); el('rect', { x: P[n][0] - 72, y: P[n][1] - 26, width: 144, height: 52 }, g); const t = el('text', { x: P[n][0], y: P[n][1] - 2 }, g); t.textContent = n; const s = el('text', { x: P[n][0], y: P[n][1] + 15, class: 's' }, g); s.textContent = SUB[n]; nodes[n] = g; }
+const pkt = el('g', { class: 'pkt' }); el('circle', { r: 8 }, pkt); const lbl = el('text', { y: -14 }, pkt);
+const log = document.getElementById('log');
+function move(a, b, ms, wait) {
+  return new Promise(async (res) => {
+    const [x1, y1] = P[a], [x2, y2] = a === b ? [P[a][0], P[a][1] + 60] : P[b];
+    const start = performance.now();
+    while (true) {
+      const k = Math.min(1, (performance.now() - start) / ms);
+      const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      pkt.setAttribute('transform', `translate(${x1 + (x2 - x1) * e},${y1 + (y2 - y1) * e - (a === b ? Math.sin(Math.PI * e) * 40 : 0)})`);
+      if (k >= 1) break; await wait(16);
+    }
+    res();
+  });
+}
+player(async (r, wait, n) => {
+  document.getElementById('cnt').textContent = `요청 #${r.id} ${r.method} ${r.path}`;
+  log.textContent = '';
+  for (const h of r.hops) {
+    Object.values(nodes).forEach((g) => g.classList.remove('on'));
+    Object.values(wires).forEach((w) => w.classList.remove('on'));
+    nodes[h.from].classList.add('on');
+    const w = wires[[h.from, h.to].sort().join('-')]; if (w) w.classList.add('on');
+    lbl.textContent = h.label.length > 34 ? h.label.slice(0, 34) + '…' : h.label;
+    const line = document.createElement('div'); line.className = 'cur';
+    line.textContent = `${h.from} → ${h.to}  ${h.label}\n   ${h.data.replace(/\r\n/g, '⏎').slice(0, 220)}`;
+    log.prepend(line);
+    await move(h.from, h.to, 1100, wait);
+    nodes[h.to].classList.add('on');
+    await wait(500);
+  }
+});
+</script></body></html>

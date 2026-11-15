@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 패킷 캡처</title><link rel="stylesheet" href="base.css">
+<style>
+.wrap { display: grid; grid-template-rows: 1fr auto auto; height: calc(100vh - 70px); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; color: var(--dim); font-weight: normal; border-bottom: 1px solid var(--line); padding: 3px 8px; position: sticky; top: 0; background: var(--bg); }
+td { padding: 2px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+tr.sel td { background: #0d3a1e; color: #d8ffe6; }
+.list { overflow: auto; border-bottom: 1px solid var(--line); }
+.tree { padding: 8px 14px; border-bottom: 1px solid var(--line); min-height: 110px; white-space: pre-wrap; }
+.dump { padding: 8px 14px 50px; white-space: pre; overflow-x: auto; color: var(--c); min-height: 110px; }
+.p-HTTP { color: var(--c); } .p-QUEUE { color: var(--a); } .p-EXEC { color: var(--g); } .p-AOF { color: #ff8cd9; } .p-DISK { color: var(--r); }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">03 · capture — loopback (miniredis)</h1><span class="sub">와이어샤크처럼: 위 = 지나간 메시지 목록, 가운데 = 해석, 아래 = 실제 바이트</span></div>
+<div class="wrap">
+  <div class="list"><table><thead><tr><th>No.</th><th>Time(µs)</th><th>Source</th><th>Destination</th><th>Proto</th><th>Len</th><th>Info</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="tree" id="tree"></div>
+  <div class="dump" id="dump"></div>
+</div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const rows = document.getElementById('rows');
+const proto = (h) => h.to === 'AOF' ? 'AOF' : h.to === 'DISK' ? 'DISK' : h.to === 'QUEUE' || h.from === 'QUEUE' ? 'QUEUE' : h.to === 'MEMORY' || h.from === 'MEMORY' ? 'EXEC' : 'HTTP';
+function dump(bytes) {
+  if (!bytes) return '(같은 프로세스 안: 바이트를 보내는 게 아니라 객체 참조만 넘긴다)';
+  const b = [...bytes];
+  let s = '';
+  for (let i = 0; i < b.length; i += 16) {
+    const c = b.slice(i, i + 16);
+    s += i.toString(16).padStart(4, '0') + '  ' + c.map((x) => x.toString(16).padStart(2, '0')).join(' ').padEnd(48) + '  ' + c.map((x) => (x >= 32 && x < 127 ? String.fromCharCode(x) : '.')).join('') + '\n';
+  }
+  return s;
+}
+let no = 0;
+player(async (r, wait) => {
+  document.getElementById('cnt').textContent = `요청 #${r.id}`;
+  for (const h of r.hops) {
+    const tr = document.createElement('tr');
+    const len = h.bytes ? h.bytes.length : '-';
+    for (const v of [++no, TR.us(h.t), h.from, h.to, proto(h), len, h.label]) { const td = document.createElement('td'); td.textContent = v; tr.append(td); }
+    tr.className = 'p-' + proto(h);
+    rows.querySelectorAll('.sel').forEach((x) => x.classList.remove('sel'));
+    tr.classList.add('sel'); rows.append(tr); tr.scrollIntoView({ block: 'nearest' });
+    document.getElementById('tree').textContent =
+      `▸ Frame ${no}: ${h.from} → ${h.to}\n▸ ${proto(h)}: ${h.label}\n  ▸ 의미: ${h.note}\n  ▸ 요청 #${r.id}  ${r.method} ${r.path}`;
+    document.getElementById('dump').textContent = dump(h.bytes);
+    await wait(1300);
+  }
+});
+</script></body></html>

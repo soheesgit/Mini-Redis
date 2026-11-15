@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 바이트 파이프</title><link rel="stylesheet" href="base.css">
+<style>
+#pipes { padding: 10px 14px 60px; display: flex; flex-direction: column; gap: 10px; }
+.row { display: grid; grid-template-columns: 92px 1fr 92px; gap: 8px; align-items: center; opacity: .25; transition: opacity .3s; }
+.row.on, .row.done { opacity: 1; }
+.end { border: 1px solid var(--g2); padding: 6px 4px; text-align: center; font-size: 12px; }
+.row.on .end { border-color: var(--a); color: var(--a); box-shadow: 0 0 10px rgba(255,181,71,.4); }
+.pipe { position: relative; height: 34px; border-top: 2px solid var(--line); border-bottom: 2px solid var(--line); overflow: hidden; }
+.row.on .pipe { border-color: var(--g2); }
+.train { position: absolute; top: 6px; left: 0; display: flex; gap: 3px; white-space: nowrap; transform: translateX(-100%); }
+.train span { font-size: 11px; padding: 1px 3px; background: #0b2414; color: var(--g); }
+.train span.t { background: #0b2030; color: var(--c); }
+.cap { grid-column: 2; font-size: 11.5px; color: var(--dim); margin-top: -6px; }
+.row.on .cap { color: var(--c); }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">04 · byte pipes</h1><span class="sub">구간마다 실제 바이트(16진수)가 관을 타고 흘러간다. 구간마다 바이트 모양이 바뀌는 것(HTTP → argv → AOF 레코드)을 본다</span></div>
+<div id="pipes"></div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const box = document.getElementById('pipes');
+function bytesOf(h) { return h.bytes ? [...h.bytes].map((x) => x.toString(16).padStart(2, '0')) : null; }
+player(async (r, wait) => {
+  document.getElementById('cnt').textContent = `요청 #${r.id} ${r.method} ${r.path}`;
+  box.textContent = '';
+  const rowsEl = r.hops.map((h) => {
+    const row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = '<div class="end"></div><div class="pipe"><div class="train"></div></div><div class="end"></div><div class="cap"></div>';
+    row.children[0].textContent = h.from; row.children[2].textContent = h.to;
+    row.children[3].textContent = `${h.label}  —  ${h.note}`;
+    const train = row.querySelector('.train');
+    const bs = bytesOf(h);
+    if (!bs) { const s = document.createElement('span'); s.textContent = '⟨참조 전달: 바이트 없음⟩ ' + h.label; s.className = 't'; train.append(s); }
+    for (const b of (bs || []).slice(0, 90)) {
+      const s = document.createElement('span'); s.textContent = b;
+      const c = parseInt(b, 16); if (c >= 32 && c < 127) { s.className = 't'; s.title = String.fromCharCode(c); }
+      train.append(s);
+    }
+    box.append(row); return row;
+  });
+  for (let i = 0; i < rowsEl.length; i++) {
+    const row = rowsEl[i]; row.classList.add('on'); row.scrollIntoView({ block: 'nearest' });
+    const train = row.querySelector('.train'), pipe = row.querySelector('.pipe');
+    const dist = pipe.clientWidth + train.scrollWidth;
+    const ms = 1600, start = performance.now();
+    while (true) {
+      const k = Math.min(1, (performance.now() - start) / ms);
+      train.style.transform = `translateX(${-train.scrollWidth + dist * k * 0.999}px)`;
+      if (k >= 1) break; await wait(16);
+    }
+    row.classList.remove('on'); row.classList.add('done');
+  }
+});
+</script></body></html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 메모리 덤프</title><link rel="stylesheet" href="base.css">
+<style>
+#mem { padding: 10px 14px 60px; white-space: pre-wrap; word-break: break-all; font-size: 12.5px; }
+.chg { color: #000; background: var(--a); }
+.ptr { color: var(--c); }
+.nul { color: var(--dim); }
+#head { padding: 6px 14px; color: var(--c); white-space: pre-wrap; border-bottom: 1px solid var(--line); }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">06 · heap dump: keys table</h1><span class="sub">해시 테이블을 메모리 덤프처럼. 칸 = 포인터 8바이트, Node → Entry 포인터를 따라간다. 바뀐 줄이 노랗게 깜빡인다 (주소는 그림용)</span></div>
+<div id="head"></div>
+<div id="mem"></div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const mem = document.getElementById('mem');
+const addr = (s) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return '0x00007f' + (h & 0xffffff).toString(16).padStart(6, '0') + '0'; };
+function lines(snap) {
+  const K = snap.keys, out = [];
+  const tbl = (name, chains) => {
+    out.push(`${name}  Node[${chains.length}] @ ${addr(name + chains.length)}   (칸 하나 = 포인터 8B)`);
+    chains.forEach((ch, i) => {
+      if (!ch.length) { out.push(`  [${String(i).padStart(2)}] 0x0000000000000000  null`); return; }
+      let s = `  [${String(i).padStart(2)}] ${addr(ch[0].k)} ──▶ `;
+      s += ch.map((n, j) => `Node@${addr(n.k).slice(-6)}{key:"${n.k}" next:${j + 1 < ch.length ? 'Node@' + addr(ch[j + 1].k).slice(-6) : 'null'} value:──▶ Entry{"${n.v}" ${n.vlen}B${n.ttl >= 0 ? ` ttl:${(n.ttl / 1000).toFixed(0)}s` : ''}}}`).join(' ─▶ ');
+      out.push(s);
+    });
+  };
+  tbl(K.size1 ? 'table[0] (old)' : 'table[0]', K.t0);
+  if (K.size1) { out.push(`rehashIndex = ${K.rehashIndex}`); tbl('table[1] (new)', K.t1); }
+  out.push('', `used=${snap.memory}B  keys=${snap.count}  lru(head→tail)=[${snap.lru.join(', ')}]`);
+  return out;
+}
+let prev = [];
+async function show(snap, wait, head) {
+  const now = lines(snap);
+  document.getElementById('head').textContent = head;
+  mem.textContent = '';
+  for (const [i, l] of now.entries()) {
+    const d = document.createElement('div');
+    d.textContent = l;
+    if (prev[i] !== l) d.className = 'chg';
+    mem.append(d);
+  }
+  await wait(400);
+  mem.querySelectorAll('.chg').forEach((x) => (x.className = ''));
+  prev = now;
+}
+player(async (r, wait) => {
+  document.getElementById('cnt').textContent = `요청 #${r.id} ${r.method} ${r.path}`;
+  if (!r.snap) return;
+  const L = r.end.loc;
+  await show(r.snap, wait, `> ${r.end.cmd} ${r.end.key}   siphash=0x${L.hash}   bucket=${L.table === 1 ? L.idx1 : L.idx0}${L.table === 1 ? ' (new)' : ''}   → ${r.end.result}`);
+  await wait(2200);
+  // 응답 뒤 배경 리해싱이 있으면 이어서
+  for (const b of TR.background.filter((e) => e.t > r.end.t && e.t < (TR.reqs.find((x) => x.id === r.id + 1)?.hops[0].t ?? Infinity))) {
+    await show(b.snap, wait, `> [work tick] ${b.type} ${b.bucket ?? ''} ${b.moved ? '[' + b.moved.join(',') + '] → table[1]' : ''}`);
+    await wait(1400);
+  }
+}, { gap: 600 });
+</script></body></html>
