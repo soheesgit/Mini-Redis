@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import miniredis.debug.Trace;
 import miniredis.store.Store;
 import miniredis.store.StoreException;
 
@@ -88,6 +89,7 @@ public final class Persistence implements AutoCloseable {
                     } else {
                         replayAof(p, i == manifest.size() - 1, store);
                     }
+                    if (trace != null) trace.emit("recover.file", "file", name, "bytes", Files.size(p));
                 }
                 String last = manifest.get(manifest.size() - 1);
                 seq = seqOf(last);
@@ -127,7 +129,9 @@ public final class Persistence implements AutoCloseable {
             throw new IOException("AOF 손상 (" + p.getFileName() + " 위치 " + parsed.goodEnd() + "). 시작을 거부한다");
         }
         parsed.records().forEach(store::execute);
+        if (trace != null) trace.emit("recover.replay", "file", p.getFileName().toString(), "records", parsed.records().size());
         if (parsed.problem() == Records.Problem.TRUNCATED_TAIL) {
+            if (trace != null) trace.emit("recover.truncated", "file", p.getFileName().toString(), "goodEnd", parsed.goodEnd(), "size", Files.size(p));
             try (FileChannel c = FileChannel.open(p, WRITE)) {
                 c.truncate(parsed.goodEnd());
                 c.force(true);
@@ -184,7 +188,13 @@ public final class Persistence implements AutoCloseable {
                 }
                 FileChannel c = current;
                 try {
+                    long size = trace == null ? 0 : c.size();
+                    long t = System.nanoTime();
                     c.force(false);
+                    if (trace != null && size != lastForcedSize) { // 직전 fsync 뒤 write가 있었을 때만 기록
+                        lastForcedSize = size;
+                        trace.emit("aof.fsync", "bytes", size, "us", (System.nanoTime() - t) / 1000);
+                    }
                 } catch (ClosedChannelException e) {
                     // 압축 ①이 막 교체한 옛 채널. executor가 닫기 전에 force했으므로 무시한다
                 } catch (IOException e) {
@@ -230,6 +240,7 @@ public final class Persistence implements AutoCloseable {
                     Job done = job;
                     job = null;
                     done.finish();
+                    if (trace != null) trace.emit("job.finish", "kind", done.rewrite ? "rewrite" : "bgsave", "ms", lastJobMs, "manifest", manifest);
                     return;
                 }
             }
@@ -310,6 +321,49 @@ public final class Persistence implements AutoCloseable {
     }
 
     private long lastJobMs;
+
+    // ---------------- 관찰용 (데모, 기본 꺼짐) ----------------
+
+    private volatile Trace trace; // fsync 스레드도 읽는다
+    private long lastForcedSize = -1; // fsync 스레드만 쓴다
+
+    public void setTrace(Trace trace) {
+        this.trace = trace;
+    }
+
+    /** 지금 레코드가 붙는 AOF 파일 이름 */
+    public String currentFile() {
+        return manifest.get(manifest.size() - 1);
+    }
+
+    public long currentSize() {
+        try {
+            return current.size();
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    /** DEBUG AOF: manifest, 파일 크기, 현재 AOF의 앞 max바이트(16진수). 레코드 경계는 화면이 형식대로 나눈다. */
+    public Map<String, Object> debugAof(int max) throws IOException {
+        Map<String, Object> m = new LinkedHashMap<>();
+        List<Map<String, Object>> files = new ArrayList<>();
+        for (String name : manifest) {
+            Map<String, Object> f = new LinkedHashMap<>();
+            f.put("name", name);
+            f.put("bytes", Files.size(dir.resolve(name)));
+            files.add(f);
+        }
+        m.put("manifest", files);
+        m.put("current", currentFile());
+        m.put("background", job == null ? "none" : job.rewrite ? "rewrite" : "bgsave");
+        byte[] all = Files.readAllBytes(dir.resolve(currentFile()));
+        int n = Math.min(all.length, max);
+        m.put("size", all.length);
+        m.put("hex", Trace.hex(all, 0, n));
+        m.put("truncated", n < all.length);
+        return m;
+    }
 
     /**
      * 조금씩 나눠 하는 스냅샷. 버킷 커서로 작업 틱마다 조금씩 순회하며 파일에 쓴다.

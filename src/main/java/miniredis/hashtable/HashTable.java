@@ -1,6 +1,8 @@
 package miniredis.hashtable;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.random.RandomGenerator;
 
@@ -36,6 +38,19 @@ public final class HashTable<V> {
     private final int[] used = new int[2];
     private int rehashIndex = -1; // -1이면 리해싱 중 아님
     private int openCursors = 0;
+
+    /** 관찰용(데모): 리해싱 진행을 알려 받는다. 없으면 null이고 비용은 null 비교뿐이다. */
+    public interface Listener {
+        void rehashStart(int from, int to);
+        void rehashStep(int bucket, List<String> moved);
+        void rehashDone(int size);
+    }
+
+    private Listener listener;
+
+    public void setListener(Listener l) {
+        this.listener = l;
+    }
 
     public HashTable(SipHash hasher, RandomGenerator rng) {
         this.hasher = hasher;
@@ -146,8 +161,11 @@ public final class HashTable<V> {
             if (--visits == 0) return true; // 빈 버킷만 계속 나오면 이번 단계는 여기까지 (한 번에 오래 멈추지 않게)
         }
         Node<V> n = used[0] > 0 ? table[0][rehashIndex] : null;
+        List<String> moved = listener == null || n == null ? null : new ArrayList<>();
+        int from = rehashIndex;
         while (n != null) {
             Node<V> next = n.next;
+            if (moved != null) moved.add(n.key);
             int i = index(hash(n.key), table[1].length);
             n.next = table[1][i];
             table[1][i] = n;
@@ -157,6 +175,7 @@ public final class HashTable<V> {
         }
         if (used[0] > 0) {
             table[0][rehashIndex++] = null;
+            if (moved != null) listener.rehashStep(from, moved); // 옮긴 칸을 비운 뒤에 알린다(상태 사진이 어긋나지 않게)
             return true;
         }
         // 완료: table[1]이 새 table[0]이 된다
@@ -165,6 +184,8 @@ public final class HashTable<V> {
         table[1] = null;
         used[1] = 0;
         rehashIndex = -1;
+        if (moved != null) listener.rehashStep(from, moved);
+        if (listener != null) listener.rehashDone(table[0].length);
         return false;
     }
 
@@ -184,6 +205,50 @@ public final class HashTable<V> {
     private void startRehash(int buckets) {
         table[1] = newBuckets(buckets);
         rehashIndex = 0;
+        if (listener != null) listener.rehashStart(table[0].length, buckets);
+    }
+
+    // ---------------- 관찰용 읽기 (데모). 스텝·커서·크기 조정을 일으키지 않는다 ----------------
+
+    /** size0, size1, used0, used1, rehashIndex, openCursors */
+    public int[] debugState() {
+        return new int[] {table[0].length, table[1] == null ? 0 : table[1].length, used[0], used[1], rehashIndex, openCursors};
+    }
+
+    /** 테이블 t의 [from, from+count) 버킷을 체인 순서(머리부터)대로. 리해싱 중이 아니면 t=1은 빈 목록. */
+    public List<List<V>> debugBuckets(int t, int from, int count) {
+        List<List<V>> out = new ArrayList<>();
+        Node<V>[] tb = table[t];
+        if (tb == null) return out;
+        for (int i = Math.max(0, from); i < Math.min(tb.length, from + count); i++) {
+            List<V> chain = new ArrayList<>();
+            for (Node<V> n = tb[i]; n != null; n = n.next) chain.add(n.value);
+            out.add(chain);
+        }
+        return out;
+    }
+
+    /** hash, idx0, idx1(-1), 들어 있는 테이블(-1), 체인 안 위치(-1), 그 체인 길이 */
+    public long[] debugLocate(String key) {
+        long h = hash(key);
+        long idx1 = table[1] == null ? -1 : index(h, table[1].length);
+        long[] r = {h, index(h, table[0].length), idx1, -1, -1, 0};
+        for (int t = 0; t <= (isRehashing() ? 1 : 0); t++) {
+            int pos = 0;
+            Node<V> n = table[t][index(h, table[t].length)];
+            int len = 0;
+            for (Node<V> m = n; m != null; m = m.next) len++;
+            for (; n != null; n = n.next, pos++) {
+                if (n.key.equals(key)) {
+                    r[3] = t;
+                    r[4] = pos;
+                    r[5] = len;
+                    return r;
+                }
+            }
+            if (t == (isRehashing() ? 1 : 0)) r[5] = len; // 없으면 새 키가 들어갈 체인의 길이
+        }
+        return r;
     }
 
     /** 무작위 버킷에서 1개를 뽑는다. 리해싱 중이면 두 테이블 모두에서. 비어 있으면 null. */

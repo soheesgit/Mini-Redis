@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
+import miniredis.debug.Trace;
 import miniredis.engine.Engine;
 import miniredis.store.StoreException;
 
@@ -51,6 +52,28 @@ public final class HttpApi {
     private record Response(int status, byte[] body, String type) { }
 
     private void handle(HttpExchange ex) throws IOException {
+        Trace trace = engine.trace(); // 관찰 기능(데모)이 꺼져 있으면 null
+        if (trace != null) {
+            long id = trace.newRequestId();
+            trace.bind(id); // 이 가상 스레드가 submit할 때 요청 ID가 큐로 따라간다
+            ex.getResponseHeaders().set("X-Trace-Id", Long.toString(id));
+            String q = ex.getRequestURI().getRawQuery();
+            trace.emit("http.recv", "method", ex.getRequestMethod(), "path", ex.getRequestURI().getRawPath() + (q == null ? "" : "?" + q),
+                "origin", ex.getRequestHeaders().containsKey("Origin"), "auth", ex.getRequestHeaders().containsKey("Authorization"));
+        }
+        Response r = null;
+        try {
+            r = respond(ex);
+        } finally {
+            if (trace != null) {
+                if (r != null) trace.emit("http.respond", "status", r.status,
+                    "body", new String(r.body, 0, Math.min(r.body.length, 200), StandardCharsets.UTF_8));
+                trace.unbind();
+            }
+        }
+    }
+
+    private Response respond(HttpExchange ex) throws IOException {
         Response r;
         try {
             r = route(ex);
@@ -75,6 +98,7 @@ public final class HttpApi {
         } finally {
             ex.close();
         }
+        return r;
     }
 
     private Response route(HttpExchange ex) throws IOException, InterruptedException {

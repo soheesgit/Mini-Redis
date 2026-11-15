@@ -46,4 +46,11 @@ final class LruList {
     void clear() {
         head = tail = null;
     }
+
+    /** 관찰용(데모): 머리(최근)부터 최대 n개. 순서를 바꾸지 않는다. */
+    java.util.List<Entry> head(int n) {
+        java.util.List<Entry> out = new java.util.ArrayList<>();
+        for (Entry e = head; e != null && out.size() < n; e = next(e)) out.add(e);
+        return out;
+    }
 }

@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.random.RandomGenerator;
 import java.util.regex.Pattern;
+import miniredis.debug.Trace;
 import miniredis.hashtable.HashTable;
 import miniredis.hashtable.SipHash;
 
@@ -66,6 +67,172 @@ public final class Store {
     private void newTables() {
         keys = new HashTable<>(new SipHash(seed), rng);
         expires = new HashTable<>(new SipHash(seed), rng);
+        if (trace != null) listen();
+    }
+
+    // ---------------- 관찰용 (데모, 기본 꺼짐) ----------------
+
+    private Trace trace;
+
+    /** setLog와 같은 방식으로 붙인다. null이면 기록 지점은 null 비교 1번뿐이다. */
+    public void setTrace(Trace trace) {
+        this.trace = trace;
+        if (trace != null) listen();
+    }
+
+    private void listen() {
+        for (String name : List.of("keys", "expires")) {
+            HashTable<Entry> t = name.equals("keys") ? keys : expires;
+            t.setListener(new HashTable.Listener() {
+                public void rehashStart(int from, int to) { trace.emit("rehash.start", "table", name, "from", from, "to", to, "snap", snap()); }
+                public void rehashStep(int bucket, List<String> moved) { trace.emit("rehash.step", "table", name, "bucket", bucket, "moved", moved, "snap", snap()); }
+                public void rehashDone(int size) { trace.emit("rehash.done", "table", name, "size", size, "snap", snap()); }
+            });
+        }
+    }
+
+    private Trace.Raw snap() {
+        return new Trace.Raw(Trace.json(snapshot()));
+    }
+
+    /** 데모 화면의 상태 사진. 버킷이 많으면(256칸 초과) 요약만. */
+    public Map<String, Object> snapshot() {
+        check();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("keys", tableView(keys, 256));
+        m.put("expires", tableView(expires, 256));
+        m.put("lru", names(all.head(64)));
+        m.put("ttl", names(ttl.head(64)));
+        m.put("memory", used);
+        m.put("maxmemory", maxmemory);
+        m.put("policy", policy.name().toLowerCase().replace('_', '-'));
+        m.put("count", (long) keys.size());
+        m.put("expired", expiredCount);
+        m.put("evicted", evictedCount);
+        return m;
+    }
+
+    private Map<String, Object> tableView(HashTable<Entry> t, int limit) {
+        int[] s = t.debugState();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("size0", s[0]);
+        m.put("size1", s[1]);
+        m.put("used0", s[2]);
+        m.put("used1", s[3]);
+        m.put("rehashIndex", s[4]);
+        m.put("openCursors", s[5]);
+        if (s[0] + s[1] <= limit) {
+            m.put("t0", chains(t.debugBuckets(0, 0, s[0])));
+            m.put("t1", chains(t.debugBuckets(1, 0, s[1])));
+        }
+        return m;
+    }
+
+    private List<List<Map<String, Object>>> chains(List<List<Entry>> buckets) {
+        List<List<Map<String, Object>>> out = new ArrayList<>();
+        for (List<Entry> chain : buckets) {
+            List<Map<String, Object>> c = new ArrayList<>();
+            for (Entry e : chain) c.add(node(e));
+            out.add(c);
+        }
+        return out;
+    }
+
+    private Map<String, Object> node(Entry e) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("k", e.key);
+        m.put("v", preview(e.value, 24));
+        m.put("vlen", e.value.length);
+        m.put("ttl", e.expireAt == 0 ? -1 : Math.max(0, (e.expireAt - mono.getAsLong()) / NS_PER_MS));
+        m.put("expired", expired(e));
+        return m;
+    }
+
+    private static List<String> names(List<Entry> es) {
+        List<String> out = new ArrayList<>();
+        for (Entry e : es) out.add(e.key);
+        return out;
+    }
+
+    private static String preview(byte[] v, int max) {
+        return new String(v, 0, Math.min(v.length, max), StandardCharsets.UTF_8);
+    }
+
+    /** DEBUG 하위 명령 (Engine이 debug가 켜졌을 때만 넘긴다). 읽기 전용: 만료 삭제·touch·리해싱 스텝을 일으키지 않는다. */
+    public Map<String, Object> debug(byte[][] argv) {
+        check();
+        String sub = argv.length > 1 ? str(argv[1]).toUpperCase() : "";
+        Map<String, Object> m = new LinkedHashMap<>();
+        switch (sub) {
+            case "TABLE" -> m.putAll(snapshot());
+            case "LOCATE" -> {
+                arity(argv, 3);
+                m.putAll(locate(str(argv[2])));
+            }
+            case "COLLIDE" -> {
+                arity(argv, 4);
+                m.putAll(collide(str(argv[2]), (int) Math.min(5, parseLong(argv[3]))));
+            }
+            case "BUCKETS" -> {
+                arity(argv, 6);
+                HashTable<Entry> t = str(argv[2]).equals("expires") ? expires : keys;
+                int from = (int) parseLong(argv[4]);
+                m.put("from", from);
+                m.put("buckets", chains(t.debugBuckets((int) parseLong(argv[3]), from, (int) Math.min(256, parseLong(argv[5])))));
+            }
+            default -> throw bad("DEBUG 하위 명령: TABLE | LOCATE k | COLLIDE k n | BUCKETS keys|expires 0|1 from count | AOF | TICKS | TICK");
+        }
+        return m;
+    }
+
+    private Map<String, Object> locate(String key) {
+        long[] r = keys.debugLocate(key);
+        Map<String, Object> m = new LinkedHashMap<>();
+        int[] s = keys.debugState();
+        m.put("key", key);
+        m.put("hash", String.format("%016x", r[0]));
+        m.put("size0", s[0]);
+        m.put("size1", s[1]);
+        m.put("idx0", r[1]);
+        m.put("idx1", r[2]);
+        m.put("rehashing", keys.isRehashing());
+        m.put("table", r[3]);
+        m.put("pos", r[4]);
+        m.put("chainLen", r[5]);
+        if (r[3] >= 0) {
+            Entry e = keys.debugBuckets((int) r[3], (int) (r[3] == 0 ? r[1] : r[2]), 1).get(0).get((int) r[4]);
+            Map<String, Object> en = new LinkedHashMap<>();
+            en.put("keyBytes", e.keyBytes);
+            en.put("valueLen", e.value.length);
+            en.put("value", preview(e.value, 256));
+            en.put("valueHex", miniredis.debug.Trace.hex(e.value, 0, Math.min(e.value.length, 64)));
+            en.put("expireAtUnixMs", e.expireAt == 0 ? -1 : toUnixMs(e.expireAt));
+            en.put("ttlMs", e.expireAt == 0 ? -1 : (e.expireAt - mono.getAsLong()) / NS_PER_MS);
+            en.put("expired", expired(e));
+            en.put("cost", cost(e));
+            en.put("lruRank", names(all.head(Integer.MAX_VALUE)).indexOf(key));
+            m.put("entry", en);
+        }
+        return m;
+    }
+
+    /** key와 같은 버킷(지금 새 키가 들어갈 테이블 기준)에 떨어지는, 아직 없는 키 n개를 찾는다. */
+    private Map<String, Object> collide(String key, int n) {
+        long[] target = keys.debugLocate(key);
+        int t = keys.isRehashing() ? 1 : 0;
+        long idx = t == 0 ? target[1] : target[2];
+        List<String> found = new ArrayList<>();
+        for (int i = 0; i < 100_000 && found.size() < n; i++) {
+            String c = key + "-" + i;
+            long[] r = keys.debugLocate(c);
+            if (r[3] < 0 && (t == 0 ? r[1] : r[2]) == idx) found.add(c);
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("key", key);
+        m.put("table", t);
+        m.put("bucket", idx);
+        m.put("candidates", found);
+        return m;
     }
 
     /** 데이터에 들어가는 모든 입구의 첫 줄. 비용은 참조 비교 1번이다. */
@@ -230,6 +397,7 @@ public final class Store {
     private Entry lookup(String key) {
         Entry e = keys.get(key);
         if (e != null && expired(e)) {
+            if (trace != null) trace.emit("expire.lazy", "key", key);
             remove(e);
             expiredCount++;
             return null;
@@ -303,6 +471,7 @@ public final class Store {
                 case NOEVICTION -> null;
             };
             if (victim == null) throw new StoreException(507, "메모리 상한 초과");
+            if (trace != null) trace.emit("evict", "key", victim.key, "memory", used, "maxmemory", maxmemory, "policy", policy.name());
             remove(victim);
             evictedCount++;
         }
@@ -320,6 +489,7 @@ public final class Store {
             for (int i = 0; i < n; i++) {
                 Entry e = expires.randomEntry();
                 if (e != null && expired(e)) {
+                    if (trace != null) trace.emit("expire.active", "key", e.key);
                     remove(e);
                     expiredCount++;
                     hit++;
