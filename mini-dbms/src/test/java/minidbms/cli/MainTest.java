@@ -20,8 +20,7 @@ public final class MainTest {
             Files.writeString(sqlFile, " \n\t");
             check(new String[] {sqlFile.toString()}, 2, "", "SQL file is empty.");
 
-            Files.writeString(sqlFile, "INSERT INTO users (name, email) VALUES ('소희', 'test@example.com');");
-            check(new String[] {sqlFile.toString()}, 1, "", "SQL execution is pending Phase 1 implementation.");
+            check(new String[] {"--data-dir", sqlFile.toString()}, 2, "", "Usage:");
         } finally {
             Files.deleteIfExists(sqlFile);
         }
