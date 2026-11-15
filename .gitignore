@@ -4,3 +4,4 @@ data/
 .claude/
 *.iml
 .DS_Store
+data-demo/
