@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>미니 Redis 관제</title>
+<link rel="stylesheet" href="/ctl.css">
+<link rel="stylesheet" href="/monitor.css">
+</head>
+<body class="mon-body">
+<div class="mon">
+  <div class="bar">
+    <h1><span class="dot"></span>미니 Redis 관제</h1>
+    <span class="clock" id="clock"></span>
+    <div class="chips">
+      <span class="chip">요청<b id="sReq">0</b></span>
+      <span class="chip bad">실패<b id="sFail">0</b></span>
+      <span class="chip">키<b id="sKeys">0</b></span>
+      <span class="chip">메모리<b id="sMem">0B</b></span>
+      <span class="chip">AOF<b id="sAof">0B</b></span>
+    </div>
+    <span class="sp"></span>
+    <a href="/client.html" target="miniredis-client">입력 콘솔 ↗</a>
+  </div>
+
+  <div class="ctrl">
+    <button id="bPlay" title="Space">⏸ 일시정지</button>
+    <button id="bStep" title="→">한 단계 ▶|</button>
+    <span class="sep"></span>
+    <button data-speed="0.5" title="1">0.5×</button><button data-speed="1" class="on" title="2">1×</button><button data-speed="2" title="3">2×</button><button data-speed="4" title="4">4×</button>
+    <span class="sep"></span>
+    <button id="bLive" title="밀린 재생을 버리고 지금 상태로">실시간으로 ⏭</button>
+    <span class="wait" id="waitN"></span>
+    <label><input type="checkbox" id="oSolo"> 묶지 않고 하나씩</label>
+    <label><input type="checkbox" id="oAuto" checked> 중요 장면에서 멈춤</label>
+    <div class="legend"><span><i class="lg-in"></i>요청</span><span><i class="lg-ret"></i>응답</span><span><i class="lg-bad"></i>거절</span><span><i class="lg-sys"></i>서버 내부 작업</span><span>초록 칸 = 데이터가 담김</span></div>
+  </div>
+
+  <div class="cap" id="cap">
+    <span class="paused">일시정지</span>
+    <div class="txt"><div class="t1" id="t1">요청을 기다리는 중</div><div class="t2" id="t2">입력 콘솔이나 curl로 요청을 보내면 여기서 한 단계씩 따라간다. Space 일시정지 · → 한 단계 · 1~4 속도</div></div>
+    <div class="prog" id="prog"></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg id="wires"></svg>
+    <div class="flowside" id="flowside"></div>
+    <div class="storeside">
+      <div class="box" id="memBox"><h3>메모리 · 해시 테이블 <span class="dim" id="memInfo"></span></h3><div id="cells"></div></div>
+      <div class="box" id="aofBox"><h3>AOF 파일 <span class="dim">끝에 한 줄씩 붙는다 · 응답보다 먼저</span></h3><div class="aofrow"><div class="aof" id="aof"></div><div class="disk" id="disk">디스크<span class="dim">fsync<br>1초마다</span></div></div></div>
+    </div>
+  </div>
+
+  <div class="rec-area">
+    <div class="steps" id="steps"></div>
+    <div class="reqlog" id="reqlog"></div>
+  </div>
+</div>
+<script src="/monitor.js" type="module"></script>
+</body>
+</html>

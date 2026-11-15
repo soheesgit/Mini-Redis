@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>미니 Redis 흐름 관찰</title>
+<link rel="stylesheet" href="/advanced.css">
+</head>
+<body>
+<header class="top">
+  <h1>미니 Redis 흐름 관찰 (고급)</h1> <a href="/" class="chip">← 간단한 화면</a>
+  <span id="srv" class="chip">서버 확인 중…</span>
+  <span id="seed" class="chip"></span>
+  <span id="ticks" class="chip"></span>
+  <span id="dropped" class="chip warn hidden"></span>
+  <button id="openSettings" class="ghost">서버 설정 · 틱 제어</button>
+</header>
+<div id="tickBanner" class="banner hidden">틱 제어 중: 배경 리해싱·만료 청소·스냅샷 진행이 멈춰 있다 (명령이 진행시키는 리해싱은 그대로)</div>
+
+<main class="grid">
+  <!-- 왼쪽: 입력 -->
+  <section class="col left">
+    <div class="panel">
+      <h2>① 요청 보내기</h2>
+      <label>명령 <select id="preset"></select></label>
+      <div class="row">
+        <label class="grow">키 <input id="key" value="a" autocomplete="off"></label>
+        <label id="ttlWrap">TTL(초) <input id="ttl" class="num" placeholder="없음"></label>
+      </div>
+      <label id="valWrap">값(본문) <textarea id="val" rows="2">1</textarea></label>
+      <details class="opts">
+        <summary>보안 검사 실험</summary>
+        <label class="check"><input type="checkbox" id="optOrigin"> Origin 헤더 붙이기 (다른 사이트에서 온 척)</label>
+        <label>인증 <select id="optAuth"><option value="ok">올바른 비밀번호(서버가 붙임)</option><option value="none">없음</option><option value="wrong">틀림</option></select></label>
+        <label class="check"><input type="checkbox" id="opt1mb"> 본문 1MB+1 바이트</label>
+        <button id="longKey" class="ghost small">키를 1025바이트로</button>
+      </details>
+      <div class="row">
+        <button id="send" class="primary">보내기</button>
+        <span id="sendPath" class="mono dim"></span>
+      </div>
+      <div id="resp" class="resp mono"></div>
+    </div>
+
+    <div class="panel">
+      <h2>동시 요청</h2>
+      <div class="row wrap">
+        <select id="burstMode"><option value="incr">INCR 같은 키</option><option value="put">PUT 서로 다른 키</option></select>
+        <input id="burstN" class="num" value="50">개
+        <label class="check"><input type="checkbox" id="burstCon" checked> 동시에</label>
+        <button id="burst">보내기</button>
+      </div>
+      <div id="burstOut" class="mono dim"></div>
+    </div>
+
+    <div class="panel">
+      <h2>실험</h2>
+      <div id="scenarios" class="scen"></div>
+      <div id="scenBox" class="scenbox hidden"></div>
+    </div>
+
+    <div class="panel">
+      <h2>보낸 요청</h2>
+      <div class="row"><label class="check"><input type="checkbox" id="showAll"> 전체 이벤트 보기(틱·fsync 포함)</label></div>
+      <ol id="history" class="history"></ol>
+    </div>
+  </section>
+
+  <!-- 가운데: 흐름 -->
+  <section class="col mid">
+    <div class="panel">
+      <h2>② 흐름 타임라인 <span id="tlTitle" class="dim"></span></h2>
+      <div class="controls">
+        <button id="first" title="처음">⏮</button>
+        <button id="prev" title="한 단계 뒤로">◀</button>
+        <button id="play" title="재생">▶</button>
+        <button id="next" title="한 단계 앞으로">▶|</button>
+        <button id="last" title="끝">⏭</button>
+        <select id="speed"><option value="1000">1단계/초</option><option value="500" selected>2단계/초</option><option value="250">4단계/초</option></select>
+        <label class="check"><input type="checkbox" id="live" checked> 라이브</label>
+      </div>
+      <div class="lanes"><span>핸들러</span><span>큐</span><span>executor</span><span>디스크</span><span>fsync</span></div>
+      <div id="timeline" class="timeline"></div>
+      <div id="evDetail" class="evdetail"></div>
+    </div>
+
+    <div class="panel">
+      <h2>⑧ 지금 단계의 코드</h2>
+      <div id="code" class="code mono"></div>
+    </div>
+
+    <div class="panel">
+      <h2>③ 큐 · 배치</h2>
+      <div id="batches" class="batches"></div>
+    </div>
+  </section>
+
+  <!-- 오른쪽: 데이터 -->
+  <section class="col right">
+    <div class="panel">
+      <h2>④ 버킷 <span class="tabs"><button data-table="keys" class="tab on">keys 테이블</button><button data-table="expires" class="tab">expires 테이블</button></span></h2>
+      <div id="snapNote" class="dim small"></div>
+      <div id="buckets" class="buckets"></div>
+    </div>
+
+    <div class="panel">
+      <h2>⑤ 키 하나가 담긴 모습 <span id="locKey" class="mono"></span></h2>
+      <div id="locate" class="locate"></div>
+    </div>
+
+    <div class="panel">
+      <h2>⑥ LRU · 메모리</h2>
+      <div id="lru"></div>
+    </div>
+
+    <div class="panel">
+      <h2>⑦ AOF 파일 바이트 <button id="aofRefresh" class="ghost small">새로 읽기</button></h2>
+      <div id="aofMeta" class="dim small"></div>
+      <div id="aof" class="aof mono"></div>
+    </div>
+
+    <div class="panel">
+      <h2>통계</h2>
+      <div id="stats" class="stats mono"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog" class="settings">
+    <h2>서버 설정 (내장 미니 Redis 재시작)</h2>
+    <label>maxmemory(바이트, 0=무제한) <input id="setMax" class="num" value="0"></label>
+    <label>축출 정책 <select id="setPolicy"><option>noeviction</option><option>allkeys-lru</option><option>volatile-lru</option></select></label>
+    <label class="check"><input type="checkbox" id="setSeed"> seed 고정(0) — 재시작해도 같은 버킷 배치</label>
+    <div class="row wrap">
+      <button type="button" id="doRestart" class="primary">재시작</button>
+      <button type="button" id="doReset">데이터 비우고 재시작</button>
+    </div>
+    <h3>복구 실험 (데모 폴더의 현재 AOF만)</h3>
+    <div class="row wrap">
+      끝 <input id="truncN" class="num tiny" value="3"> <button type="button" id="doTrunc">바이트 자르고 재시작</button>
+      <input id="flipN" class="num tiny" value="10"> <button type="button" id="doFlip">번째 바이트 뒤집고 재시작</button>
+    </div>
+    <h3>틱 제어</h3>
+    <div class="row wrap">
+      <label class="check"><input type="checkbox" id="tickWork" checked> work 틱(리해싱 1ms, 스냅샷 2ms / 10ms마다)</label>
+      <button type="button" id="tickWorkOnce" class="small">1회 실행</button>
+    </div>
+    <div class="row wrap">
+      <label class="check"><input type="checkbox" id="tickExpire" checked> expire 틱(만료 청소 / 100ms마다)</label>
+      <button type="button" id="tickExpireOnce" class="small">1회 실행</button>
+    </div>
+    <div id="setOut" class="mono dim"></div>
+    <div class="row"><button value="close">닫기</button></div>
+  </form>
+</dialog>
+<script src="/advanced.js" type="module"></script>
+</body>
+</html>
