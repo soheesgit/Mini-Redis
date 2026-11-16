@@ -1,5 +1,6 @@
 package minidbms.engine;
 
+import minidbms.cache.RedisCache;
 import minidbms.sql.SqlException;
 import minidbms.sql.SqlParser;
 import minidbms.sql.Statement;
@@ -24,9 +25,21 @@ public final class SqlEngine {
 
     private final Path dataDirectory;
     private final Map<String, TableFile> tableFiles = new HashMap<>();
+    private final QueryCache cache; // null이면 캐시 없이 파일만 쓴다
 
     public SqlEngine(Path dataDirectory) {
+        this(dataDirectory, null);
+    }
+
+    /** redis가 null이 아니면 SELECT 결과를 Mini Redis에 캐시한다 */
+    public SqlEngine(Path dataDirectory, RedisCache redis) {
         this.dataDirectory = dataDirectory;
+        this.cache = redis == null ? null : new QueryCache(redis, dataDirectory);
+    }
+
+    /** 캐시를 쓰면 "cache: hits=.. misses=..", 안 쓰면 null */
+    public String cacheSummary() {
+        return cache == null ? null : cache.summary();
     }
 
     public void execute(String sql, Consumer<Result> onResult) throws IOException {
@@ -42,8 +55,16 @@ public final class SqlEngine {
             TableFile tableFile = tableFiles.computeIfAbsent(statement.table(),
                     name -> new TableFile(dataDirectory.resolve(name + ".tbl"), schema.size() - 1));
             Result result = switch (statement) {
-                case Statement.Insert insert -> insert(insert, schema, tableFile);
-                case Statement.Select select -> select(select, schema, tableFile);
+                case Statement.Insert insert -> {
+                    Result inserted = insert(insert, schema, tableFile);
+                    if (cache != null) {
+                        cache.inserted(insert.table()); // 파일에 쓴 뒤 버전을 올린다
+                    }
+                    yield inserted;
+                }
+                case Statement.Select select -> cache == null
+                        ? select(select, schema, tableFile)
+                        : cache.select(select, () -> select(select, schema, tableFile));
             };
             onResult.accept(result);
         }
@@ -77,7 +98,7 @@ public final class SqlEngine {
         return new Inserted(tableFile.append(List.of(textValues)));
     }
 
-    private static Result select(Statement.Select select, List<String> schema, TableFile tableFile) throws IOException {
+    private static Selected select(Statement.Select select, List<String> schema, TableFile tableFile) throws IOException {
         List<String> columns = select.columns().isEmpty() ? schema : select.columns();
         int[] projection = columns.stream().mapToInt(column -> columnIndex(schema, column)).toArray();
 

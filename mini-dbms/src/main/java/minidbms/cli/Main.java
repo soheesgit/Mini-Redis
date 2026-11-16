@@ -1,5 +1,6 @@
 package minidbms.cli;
 
+import minidbms.cache.RedisCache;
 import minidbms.engine.SqlEngine;
 import minidbms.sql.SqlException;
 
@@ -44,7 +45,12 @@ public final class Main {
 
         try {
             Path dataDirectory = Path.of(customDirectory ? args[1] : "data");
-            new SqlEngine(dataDirectory).execute(sql, result -> printResult(result, out));
+            // MINIDBMS_REDIS(예: http://127.0.0.1:8080)가 있으면 Mini Redis를 캐시로 쓴다
+            var engine = new SqlEngine(dataDirectory, RedisCache.fromEnvironment());
+            engine.execute(sql, result -> printResult(result, out));
+            if (engine.cacheSummary() != null) {
+                err.println(engine.cacheSummary()); // 결과(stdout)와 섞이지 않게 stderr로
+            }
             return 0;
         } catch (SqlException | InvalidPathException exception) {
             err.println(exception.getMessage());

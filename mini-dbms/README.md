@@ -41,6 +41,16 @@ java -cp out/main:out/test minidbms.cli.Phase1IntegrationTest
 
 통합 테스트는 임시 데이터를 사용합니다. 별도 JVM에서 삽입, 조회, 재삽입을 실행해 기존 행과 다음 ID가 유지되는지 확인합니다. 빈 테이블, 스키마 오류, 불완전한 레코드도 검증합니다.
 
+## Mini Redis 캐시
+
+`MINIDBMS_REDIS=http://127.0.0.1:8080`처럼 Mini Redis 주소를 주면 `SELECT` 결과를 Redis에 캐시합니다. `INSERT`는 테이블 버전을 올려 옛 결과를 무효화합니다. 캐시 통계는 stderr에 `cache: hits=.. misses=..`로 출력됩니다. Redis가 응답하지 않으면 캐시를 끄고 파일에서 읽습니다. 두 서버를 함께 띄우는 방법은 루트의 `scripts/run-dbms-with-redis.sh`에 있습니다.
+
+```sh
+java -cp out/main:out/test minidbms.engine.QueryCacheTest
+```
+
+캐시 테스트는 기본으로 가짜 Redis 서버를 씁니다. `MINIDBMS_TEST_REDIS`에 실제 Mini Redis 주소를 주면 그 서버로 검증합니다.
+
 ## 구현 단계
 
 | 단계 | 결과물 |
