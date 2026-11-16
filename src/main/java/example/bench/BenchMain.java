@@ -26,11 +26,14 @@ import java.util.regex.Pattern;
  * --cache-stats URL  캐시 API의 /stats (적중률 계산)
  * --origin-stats URL 원본의 /stats (원본 호출 수 계산)
  * --repeat N         N회 반복 후 중앙값도 출력               기본 1
+ * --suffix S         키 뒤에 붙일 문자열 (예: "?cached=false"로 BYPASS 측정)
+ * --expect-cache V   응답 X-Cache가 V(HIT/MISS/BYPASS)가 아니면 오류로 센다 (응답 검증, 출처: 소희 구현)
  */
 public final class BenchMain {
     private static final HttpClient HTTP = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
     private static final AtomicLong UNIQUE = new AtomicLong();
     private static final java.util.Map<String, AtomicLong> ERROR_KINDS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static String suffix = "", expectCache; // main에서 한 번 정하고 측정 중에는 읽기만 한다
 
     record Result(long requests, long errors, double rps, double p50, double p95, double p99, Double hitRate, Long originCalls) { }
 
@@ -51,6 +54,8 @@ public final class BenchMain {
                 case "--cache-stats" -> cacheStats = a[i + 1];
                 case "--origin-stats" -> originStats = a[i + 1];
                 case "--repeat" -> repeat = Integer.parseInt(a[i + 1]);
+                case "--suffix" -> suffix = a[i + 1];
+                case "--expect-cache" -> expectCache = a[i + 1];
                 default -> throw new IllegalArgumentException(a[i]);
             }
         }
@@ -95,11 +100,17 @@ public final class BenchMain {
                         : Integer.toString(rnd.nextInt(keys));
                     boolean ok;
                     try {
-                        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url + key));
+                        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url + key + suffix));
                         if (mode.equals("put")) b.PUT(HttpRequest.BodyPublishers.ofString("0123456789abcdef"));
-                        int code = HTTP.send(b.build(), HttpResponse.BodyHandlers.discarding()).statusCode();
+                        HttpResponse<Void> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.discarding());
+                        int code = resp.statusCode();
                         ok = code == 200 || code == 404;
                         if (!ok) ERROR_KINDS.computeIfAbsent("HTTP " + code, k -> new AtomicLong()).incrementAndGet();
+                        String xc = resp.headers().firstValue("X-Cache").orElse("-");
+                        if (ok && expectCache != null && !expectCache.equals(xc)) {
+                            ok = false;
+                            ERROR_KINDS.computeIfAbsent("X-Cache " + xc, k -> new AtomicLong()).incrementAndGet();
+                        }
                     } catch (Exception e) {
                         ok = false;
                         ERROR_KINDS.computeIfAbsent(e.getClass().getSimpleName() + ": " + e.getMessage(), k -> new AtomicLong())

@@ -102,6 +102,28 @@ class StoreTest {
         assertEquals(200L, s.stats().get("expired"));
     }
 
+    /** 출처: 소희 구현. 만료된 키는 "없는 키"라서 DEL도 0을 돌려준다 */
+    @Test
+    void delOnExpiredKeyReturnsZero() {
+        Store s = store();
+        run(s, "SET", "k", "v", "EX", "1");
+        advance(SEC);
+        assertEquals(0L, run(s, "DEL", "k"));
+        assertNull(run(s, "GET", "k"));
+    }
+
+    /** 출처: 소희 구현. 만료된 옛 값을 지우는 일이 새로 쓴 값을 지우면 안 된다 (지호 구조에선 순서대로 실행돼 경쟁 자체가 없다) */
+    @Test
+    void setAfterExpiryKeepsFreshValue() {
+        Store s = store();
+        run(s, "SET", "k", "old", "EX", "1");
+        advance(2 * SEC);
+        run(s, "SET", "k", "fresh");
+        s.activeExpireCycle();
+        assertEquals("fresh", str(run(s, "GET", "k")));
+        assertEquals(-1L, run(s, "TTL", "k"));
+    }
+
     @Test
     void incr() {
         Store s = store();

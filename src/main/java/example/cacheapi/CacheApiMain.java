@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * 3. TTL ±10% 무작위 (같은 시각에 저장된 키들이 한꺼번에 만료되지 않게)
  * 4. 같은 키의 원본 조회는 하나로 합친다 (single-flight)
  * 5. 원본에 없는 키는 "없음"을 30초간 캐시 (없는 키 반복 조회로 원본을 두드리지 않게)
+ * 6. ?cached=false면 캐시를 읽지도 쓰지도 않고 원본만 부른다 (BYPASS, 출처: 소희 구현).
+ *    캐시 사용 전후를 같은 경로(손님 → 이 서버 → ...)로 재기 위해서다. 응답 X-Cache 헤더에 HIT/MISS/BYPASS를 적는다
  *
  * java -cp target/classes example.cacheapi.CacheApiMain [--port 8082] [--redis http://127.0.0.1:8080]
  *      [--origin http://127.0.0.1:8081] [--ttl 60] [--singleflight true]
@@ -62,12 +64,17 @@ public final class CacheApiMain {
                 default -> throw new IllegalArgumentException(args[i]);
             }
         }
-        CacheApiMain app = new CacheApiMain(redis, origin, ttl, sf);
+        HttpServer server = new CacheApiMain(redis, origin, ttl, sf).start(port);
+        System.out.println("cache api listening on 127.0.0.1:" + server.getAddress().getPort() + " (single-flight " + sf + ")");
+    }
+
+    /** 테스트에서도 띄우고 멈출 수 있게 서버를 돌려준다. port 0이면 빈 포트 */
+    HttpServer start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
-        server.createContext("/", app::handle);
+        server.createContext("/", this::handle);
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
-        System.out.println("cache api listening on 127.0.0.1:" + port + " (single-flight " + sf + ")");
+        return server;
     }
 
     private void handle(HttpExchange ex) throws IOException {
@@ -84,7 +91,8 @@ public final class CacheApiMain {
                 send(ex, 200, "{\"ok\":true}".getBytes(StandardCharsets.UTF_8));
             } else if (path.startsWith("/products/")) {
                 String id = path.substring("/products/".length());
-                if (method.equals("GET")) read(ex, id);
+                // shortcut: 쿼리가 정확히 "cached=false"일 때만 인식한다. 쿼리 옵션이 더 생기면 파서로 바꾼다
+                if (method.equals("GET")) read(ex, id, "cached=false".equals(ex.getRequestURI().getRawQuery()));
                 else if (method.equals("PUT")) write(ex, id, ex.getRequestBody().readAllBytes());
                 else send(ex, 405, new byte[0]);
             } else {
@@ -97,16 +105,23 @@ public final class CacheApiMain {
         }
     }
 
-    private void read(HttpExchange ex, String id) throws Exception {
+    private void read(HttpExchange ex, String id, boolean bypass) throws Exception {
         String key = "product:" + id;
-        HttpResponse<byte[]> cached = http.send(redisReq(key, "").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
         byte[] value;
-        if (cached.statusCode() == 200) {
-            hits.incrementAndGet();
-            value = cached.body();
+        if (bypass) {
+            ex.getResponseHeaders().set("X-Cache", "BYPASS");
+            value = fetch(id); // 캐시를 읽지도, 저장하지도 않는다
         } else {
-            misses.incrementAndGet();
-            value = singleFlight ? loadOnce(id, key) : load(id, key);
+            HttpResponse<byte[]> cached = http.send(redisReq(key, "").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+            if (cached.statusCode() == 200) {
+                hits.incrementAndGet();
+                ex.getResponseHeaders().set("X-Cache", "HIT");
+                value = cached.body();
+            } else {
+                misses.incrementAndGet();
+                ex.getResponseHeaders().set("X-Cache", "MISS");
+                value = singleFlight ? loadOnce(id, key) : load(id, key);
+            }
         }
         if (value == null || Arrays.equals(value, NONE)) send(ex, 404, "{\"error\":\"not found\"}".getBytes(StandardCharsets.UTF_8));
         else send(ex, 200, value);
@@ -128,16 +143,23 @@ public final class CacheApiMain {
     }
 
     private byte[] load(String id, String key) throws Exception {
-        originCalls.incrementAndGet();
-        HttpResponse<byte[]> r = http.send(HttpRequest.newBuilder(URI.create(origin + "/products/" + id)).GET().build(),
-            HttpResponse.BodyHandlers.ofByteArray());
-        if (r.statusCode() == 404) {
+        byte[] body = fetch(id);
+        if (body == null) {
             put(key, NONE, NEGATIVE_TTL);
             return null;
         }
-        if (r.statusCode() != 200) throw new IOException("origin " + r.statusCode());
         int jittered = Math.max(1, (int) Math.round(ttl * (0.9 + 0.2 * ThreadLocalRandom.current().nextDouble())));
-        put(key, r.body(), jittered);
+        put(key, body, jittered);
+        return body;
+    }
+
+    /** 원본 조회만 한다. 404면 null */
+    private byte[] fetch(String id) throws Exception {
+        originCalls.incrementAndGet();
+        HttpResponse<byte[]> r = http.send(HttpRequest.newBuilder(URI.create(origin + "/products/" + id)).GET().build(),
+            HttpResponse.BodyHandlers.ofByteArray());
+        if (r.statusCode() == 404) return null;
+        if (r.statusCode() != 200) throw new IOException("origin " + r.statusCode());
         return r.body();
     }
 

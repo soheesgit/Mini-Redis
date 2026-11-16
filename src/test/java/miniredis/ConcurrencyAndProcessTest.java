@@ -13,6 +13,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import miniredis.engine.Engine;
@@ -54,6 +55,31 @@ class ConcurrencyAndProcessTest {
             } finally {
                 s.stop(0);
             }
+        }
+    }
+
+    /** 출처: 소희 구현. 래치로 8개 스레드를 한꺼번에 출발시켜 같은 키를 지운다. 성공(1)은 정확히 한 번이어야 한다 */
+    @Test
+    void concurrentDelSucceedsExactlyOnce() throws Exception {
+        try (Engine e = Engine.start(new Engine.Config(dir, 0, Store.Policy.NOEVICTION))) {
+            e.call("SET", "k", "v");
+            CountDownLatch go = new CountDownLatch(1);
+            AtomicInteger deleted = new AtomicInteger();
+            List<Thread> threads = new ArrayList<>();
+            for (int t = 0; t < 8; t++) {
+                threads.add(Thread.ofPlatform().start(() -> {
+                    try {
+                        go.await();
+                        if ((Long) e.call("DEL", "k") == 1L) deleted.incrementAndGet();
+                    } catch (InterruptedException x) {
+                        Thread.currentThread().interrupt();
+                    }
+                }));
+            }
+            go.countDown();
+            for (Thread t : threads) t.join();
+            assertEquals(1, deleted.get());
+            assertNull(e.call("GET", "k"));
         }
     }
 
