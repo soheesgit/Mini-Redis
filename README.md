@@ -41,7 +41,7 @@ SQL 파일마다 DBMS 프로세스를 따로 띄웁니다. 첫 실행은 `cache:
 | 대상 | 명령 | 결과 |
 |---|---|---|
 | Mini Redis | `cd mini-redis && mvn test` | 57개 통과 |
-| Mini DBMS | [mini-dbms/README.md](mini-dbms/README.md)의 테스트 순서 + `java -cp out/main:out/test minidbms.engine.QueryCacheTest` | 4종 통과 (캐시 검사 5개 포함) |
-| 연결 (실제 서버) | Mini Redis를 띄운 뒤 `MINIDBMS_TEST_REDIS=http://127.0.0.1:<포트> java -cp out/main:out/test minidbms.engine.QueryCacheTest` | 5개 통과 |
+| Mini DBMS | [mini-dbms/README.md](mini-dbms/README.md)의 테스트 순서 + `java -cp out/main:out/test minidbms.engine.QueryCacheTest` | 4종 통과 (캐시 검사 6개 포함) |
+| 연결 (실제 서버) | Mini Redis를 띄운 뒤 `MINIDBMS_TEST_REDIS=http://127.0.0.1:<포트> java -cp out/main:out/test minidbms.engine.QueryCacheTest` | 6개 통과 |
 
 `QueryCacheTest`는 `MINIDBMS_TEST_REDIS`가 없으면 같은 HTTP 규칙을 흉내 내는 가짜 서버로 돌아서, Redis 서버 없이도 실행됩니다.

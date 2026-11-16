@@ -26,8 +26,10 @@ import java.util.List;
  * 버전은 파일을 읽기 "전에" 읽는다. 그래야 조회 도중 다른 프로세스가 INSERT해도 그 결과가 옛 버전 키에만 저장된다.
  * Redis가 응답하지 않으면 이 실행 동안 캐시를 끄고 파일에서 바로 읽는다. 캐시는 성능 장치일 뿐, 정답은 항상 파일이다.
  */
+// shortcut: 카운터와 disabledReason은 스레드 안전하지 않다. 단일 스레드 CLI 전제이며, Phase 3에서 엔진을 스레드끼리 공유하면 Atomic/volatile로 바꾼다
 final class QueryCache {
     static final long TTL_SECONDS = 60;
+    static final int MAX_VALUE_BYTES = 1 << 20; // mini-redis HttpApi.MAX_BODY와 같은 값. 넘으면 서버가 413으로 거부한다
 
     interface Loader {
         SqlEngine.Selected load() throws IOException;
@@ -62,8 +64,12 @@ final class QueryCache {
         }
         misses++;
         SqlEngine.Selected result = loader.load();
+        byte[] encoded = encode(result);
+        if (encoded.length > MAX_VALUE_BYTES) {
+            return result; // 너무 큰 결과는 저장만 건너뛴다. 캐시는 다음 SELECT에서 계속 쓴다
+        }
         try {
-            redis.set(key, encode(result), TTL_SECONDS);
+            redis.set(key, encoded, TTL_SECONDS);
         } catch (IOException exception) {
             disable(exception);
         }

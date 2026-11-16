@@ -33,12 +33,13 @@ public final class QueryCacheTest {
             differentQueriesUseDifferentKeys(redis);
             codecKeepsValues();
             redisDownFallsBackToFile();
+            oversizedResultSkipsCacheOnly(redis);
         } finally {
             if (fake != null) {
                 fake.stop(0);
             }
         }
-        System.out.println("Passed 5 cache checks (" + (url != null ? "real Mini Redis " + url : "fake Redis") + ").");
+        System.out.println("Passed 6 cache checks ("+ (url != null ? "real Mini Redis " + url : "fake Redis") + ").");
     }
 
     /** 첫 실행은 MISS, 같은 데이터 폴더를 쓰는 다음 실행(새 엔진 = 새 CLI 프로세스)은 Redis에서 HIT */
@@ -109,6 +110,21 @@ public final class QueryCacheTest {
         if (!engine.cacheSummary().startsWith("cache: off")) {
             throw new AssertionError("Cache should be off when Redis is down: " + engine.cacheSummary());
         }
+    }
+
+    /** 1MB 넘는 결과는 저장만 건너뛰고, 캐시는 꺼지지 않아 다음 작은 SELECT는 그대로 캐시된다 */
+    private static void oversizedResultSkipsCacheOnly(RedisCache redis) throws IOException {
+        Path dir = Files.createTempDirectory("mini-dbms-cache-");
+        var engine = new SqlEngine(dir, redis);
+        String big = "x".repeat(600_000);
+        run(engine, "INSERT INTO users (name, email) VALUES ('" + big + "', 'a@example.com');"
+                + "INSERT INTO users (name, email) VALUES ('" + big + "', 'b@example.com');");
+        run(engine, "SELECT * FROM users;");
+        run(engine, "SELECT * FROM users;");
+        expect(engine.cacheSummary(), "cache: hits=0 misses=2"); // 큰 결과는 저장되지 않아 두 번 다 MISS
+        run(engine, "SELECT id FROM users;");
+        run(engine, "SELECT id FROM users;");
+        expect(engine.cacheSummary(), "cache: hits=1 misses=3"); // 캐시는 살아 있다
     }
 
     private static List<SqlEngine.Result> run(SqlEngine engine, String sql) throws IOException {
