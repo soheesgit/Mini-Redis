@@ -8,13 +8,13 @@
 - [x] **단위 테스트:** 저장, 조회, 삭제
 - [x] **기능 테스트:** 예제 상품 API 응답을 Mini Redis에 저장하고 다음 요청에서 재사용
 - [x] **경계 사례:** 없는 키 조회·삭제, 같은 키 덮어쓰기, 만료된 키 조회, 같은 키 동시 요청
-- [x] **성능 비교:** 같은 경로에서 캐시 사용 전후 응답 시간 비교 (HIT이 캐시를 안 쓸 때보다 p50 약 27배 빠름)
+- [x] **성능 비교:** 같은 경로에서 캐시 사용 전후 응답 시간 비교 (HIT이 캐시를 안 쓸 때보다 p50 약 26배 빠름)
 
 테스트 57개는 모두 통과했습니다. 성능 그래프와 세부 결과는 [검증결과.md](검증결과.md)에 있습니다.
 
 ## 실행
 
-JDK 25가 필요합니다. 스크립트는 `JAVA_HOME`이 없으면 `~/tools/jdk-25.0.5+8`을 씁니다.
+JDK 25와 Maven이 필요합니다(`pom.xml`이 Java 25로 컴파일). PATH의 `java`가 25보다 낮으면 클래스 버전 오류가 나므로, `JAVA_HOME`을 JDK 25로 잡고 `$JAVA_HOME/bin/java`로 실행합니다. `run.sh`는 `JAVA_HOME`이 없으면 `~/tools/jdk-25.0.5+8`을 씁니다.
 
 ```bash
 mvn compile           # target/classes 생성
@@ -25,8 +25,8 @@ mvn test              # 테스트 57개
 캐시 예제를 돌리려면 서버 두 개를 더 띄웁니다.
 
 ```bash
-java -cp target/classes example.origin.OriginMain       # 느린 원본 :8081 (응답마다 50ms)
-java -cp target/classes example.cacheapi.CacheApiMain   # 상품 API :8082 (Mini Redis를 캐시로 사용)
+$JAVA_HOME/bin/java -cp target/classes example.origin.OriginMain       # 느린 원본 :8081 (응답마다 50ms)
+$JAVA_HOME/bin/java -cp target/classes example.cacheapi.CacheApiMain   # 상품 API :8082 (Mini Redis를 캐시로 사용)
 ```
 
 ## API
