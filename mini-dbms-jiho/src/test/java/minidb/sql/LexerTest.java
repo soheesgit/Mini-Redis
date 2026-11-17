@@ -77,6 +77,30 @@ class LexerTest {
     }
 
     @Test
+    void numbersMayStartOrEndWithDot() {
+        assertEquals(List.of(NUMBER, NUMBER, NUMBER, EOF), types(".5 1. 0.5"));
+        assertEquals(List.of(".5", "1.", "0.5"), texts(".5 1. 0.5"));
+        assertEquals(List.of(IDENT, EQ, NUMBER, SEMICOLON, EOF), types("x=1.;"));
+    }
+
+    @Test
+    void secondDotInNumberIsAnError() {
+        for (String sql : List.of("1.5.2", "1..2", ".5.2")) {
+            SqlException e = assertThrows(SqlException.class, () -> Lexer.tokenize(sql), sql);
+            assertTrue(e.getMessage().startsWith("1:1: 숫자 뒤의 '.'"), e.getMessage());
+        }
+    }
+
+    @Test
+    void unsupportedNumberFormsStayErrors() {
+        assertThrows(SqlException.class, () -> Lexer.tokenize("1e3"));
+        assertThrows(SqlException.class, () -> Lexer.tokenize("0x1F"));
+        SqlException e = assertThrows(SqlException.class, () -> Lexer.tokenize("+5"));
+        assertTrue(e.getMessage().startsWith("1:1: 모르는 글자: '+'"), e.getMessage());
+        assertThrows(SqlException.class, () -> Lexer.tokenize(".")); // 점 하나는 숫자가 아님
+    }
+
+    @Test
     void negativeNumberIsMinusThenNumber() {
         assertEquals(List.of(MINUS, NUMBER, EOF), types("-5"));
     }

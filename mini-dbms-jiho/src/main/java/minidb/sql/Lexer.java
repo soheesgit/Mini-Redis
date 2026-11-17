@@ -43,7 +43,7 @@ public final class Lexer {
             char c = peek(0);
             if (Character.isLetter(c) || c == '_') {
                 word(startLine, startCol);
-            } else if (isDigit(c)) {
+            } else if (isDigit(c) || (c == '.' && isDigit(peek(1)))) {
                 number(startLine, startCol);
             } else if (c == '\'') {
                 string(startLine, startCol);
@@ -83,9 +83,12 @@ public final class Lexer {
     private void number(int l, int c) {
         int start = pos;
         while (pos < src.length() && isDigit(peek(0))) advance();
-        if (peek(0) == '.' && isDigit(peek(1))) {
+        if (peek(0) == '.') { // ".5", "1.", "1.5" 모두 받음 (MySQL과 같음). 변환은 값 검사 단계에서
             advance();
             while (pos < src.length() && isDigit(peek(0))) advance();
+        }
+        if (peek(0) == '.') {
+            throw new SqlException(l, c, "숫자 뒤의 '.': " + src.substring(start, pos + 1));
         }
         if (pos < src.length() && (Character.isLetter(peek(0)) || peek(0) == '_')) {
             throw new SqlException(l, c, "숫자 뒤에 글자가 붙어 있음: " + src.substring(start, pos + 1));
