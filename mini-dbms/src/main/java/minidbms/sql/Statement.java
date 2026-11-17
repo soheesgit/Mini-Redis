@@ -1,11 +1,10 @@
 package minidbms.sql;
 
 import java.util.List;
-import java.util.Optional;
 
-/** sealed와 permits는 Statement를 구현할 타입을 Insert와 Select로 제한한다. */
-public sealed interface Statement permits Statement.Insert, Statement.Select {
-    // 두 문장에 공통인 테이블 이름 조회 메서드다.
+/** sealed와 permits는 Statement를 구현할 타입을 아래 네 가지 문장으로 제한한다. */
+public sealed interface Statement permits Statement.Insert, Statement.Select, Statement.Update, Statement.Delete {
+    // 모든 문장에 공통인 테이블 이름 조회 메서드다.
     String table();
 
     // record는 필드와 table() 같은 접근 메서드를 만든다.
@@ -20,12 +19,19 @@ public sealed interface Statement permits Statement.Insert, Statement.Select {
     }
 
     // 빈 columns는 SELECT *, 빈 where는 WHERE 조건이 없는 문장을 뜻한다.
-    record Select(String table, List<String> columns, Optional<Condition> where) implements Statement {
+    record Select(String table, List<String> columns, List<Condition> where) implements Statement {
         public Select {
             columns = List.copyOf(columns);
+            where = List.copyOf(where);
         }
     }
 
-    // Phase 1의 WHERE는 열 하나와 리터럴 하나를 비교하는 동등 조건이다.
-    record Condition(String column, Object value) {}
+    // 수정과 삭제는 필수 ID 조건으로 최대 한 행을 지정한다.
+    record Update(String table, String column, Object value, long id) implements Statement {}
+    record Delete(String table, long id) implements Statement {}
+
+    enum Operator { EQ, NE, LT, LE, GT, GE }
+
+    // SELECT의 WHERE는 이런 비교를 AND로 연결한다.
+    record Condition(String column, Operator operator, Object value) {}
 }

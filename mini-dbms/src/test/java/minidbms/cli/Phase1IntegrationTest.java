@@ -8,6 +8,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -20,12 +21,13 @@ public final class Phase1IntegrationTest {
     private Phase1IntegrationTest() {}
 
     public static void main(String[] args) throws Exception {
-        // 세 시나리오는 같은 임시 DB를 사용한다. 영속성 테스트로 만든 파일로 오류 처리까지 확인한다.
+        // 삽입·조회 시나리오에서 만든 임시 DB로 오류 처리도 검증한다.
         Path workspace = Files.createTempDirectory("mini-dbms-phase1-");
         try {
             verifiesPersistence(workspace);
             rejectsInvalidQueries(workspace);
             reportsCorruptRecords(workspace);
+            verifiesMutations(Files.createDirectory(workspace.resolve("mutations")));
         } finally {
             try (var paths = Files.walk(workspace)) {
                 for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
@@ -33,7 +35,7 @@ public final class Phase1IntegrationTest {
                 }
             }
         }
-        System.out.println("Passed 3 Phase 1 integration scenarios.");
+        System.out.println("Passed 4 Phase 1 integration scenarios.");
     }
 
     private static void verifiesPersistence(Path workspace) throws Exception {
@@ -122,6 +124,59 @@ public final class Phase1IntegrationTest {
         Files.write(table, new byte[] {0, 0, 0, 16, 0}, StandardOpenOption.APPEND);
         expectError(run(workspace, "SELECT * FROM users;"), 1, "",
                 "at byte " + validSize + ": incomplete record");
+    }
+
+    private static void verifiesMutations(Path workspace) throws Exception {
+        Path table = Files.createDirectory(workspace.resolve("data")).resolve("users.tbl");
+        // 변경 레코드 도입 전 형식으로 저장한 ID 1, name=first, email=a@x.
+        byte[] oldRecord = HexFormat.of().parseHex("00000018000000000000000100000005666972737400000003614078");
+        Files.write(table, oldRecord);
+
+        expectSuccess(run(workspace, """
+                INSERT INTO users (name, email) VALUES ('second', 'b@x');
+                INSERT INTO users (name, email) VALUES ('third', 'c@x');
+                UPDATE users SET name = '두 번째' WHERE id = 2;
+                UPDATE users SET email = 'longer@example.com' WHERE id = 2;
+                DELETE FROM users WHERE id = 3;
+                SELECT id, name FROM users WHERE id >= 1 AND id <= 3 AND name != 'first';
+                """), """
+                INSERT 1 (id=2)
+                INSERT 1 (id=3)
+                UPDATE 1
+                UPDATE 1
+                DELETE 1
+                id\tname
+                2\t두 번째
+                """);
+        byte[] changed = Files.readAllBytes(table);
+        if (!Arrays.equals(oldRecord, Arrays.copyOf(changed, oldRecord.length))) {
+            throw new AssertionError("Mutations changed the bytes of the legacy record");
+        }
+
+        expectSuccess(run(workspace, """
+                SELECT * FROM users WHERE id > 0 AND id < 4 AND name <> '';
+                UPDATE users SET name = 'missing' WHERE id = 3;
+                DELETE FROM users WHERE id = 3;
+                DELETE FROM users WHERE id = 99;
+                """), """
+                id\tname\temail
+                1\tfirst\ta@x
+                2\t두 번째\tlonger@example.com
+                UPDATE 0
+                DELETE 0
+                DELETE 0
+                """);
+        expectError(run(workspace, "UPDATE users SET id = 6 WHERE id = 2;"), 2, "", "cannot be updated");
+        expectError(run(workspace, "UPDATE users SET name = 6 WHERE id = 2;"), 2, "", "requires TEXT");
+        expectError(run(workspace, "UPDATE users SET missing = 'x' WHERE id = 2;"), 2, "", "Unknown column");
+        expectError(run(workspace, "DELETE FROM users;"), 2, "", "Expected WHERE");
+        expectError(run(workspace, "SELECT id FROM users WHERE name > 'a';"), 2, "", "TEXT comparisons");
+        expectError(run(workspace, "SELECT id FROM users WHERE id > 1 AND unknown = 2;"), 2, "", "Unknown column");
+        expectSameBytes(changed, table);
+
+        expectSuccess(run(workspace, "INSERT INTO users (name, email) VALUES ('new', 'd@x');"), "INSERT 1 (id=4)\n");
+        expectSuccess(run(workspace, "SELECT id FROM users WHERE id >= 2 AND id != 3;"), "id\n2\n4\n");
+        expectSuccess(run(workspace, "SELECT id FROM users WHERE id > 1 AND id <= 2;"), "id\n2\n");
     }
 
     private static Run run(Path workspace, String sql, String... options) throws IOException, InterruptedException {

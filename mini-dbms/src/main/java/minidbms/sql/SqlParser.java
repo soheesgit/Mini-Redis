@@ -3,13 +3,15 @@ package minidbms.sql;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.function.Supplier;
 
-/** SQL 문자열을 토큰으로 읽고 INSERT와 SELECT 문장 객체로 조립한다. */
+/** SQL 문자열을 토큰으로 읽고 문장 객체로 조립한다. */
 public final class SqlParser {
     // enum은 토큰 종류를 정한다. 렉서는 키워드와 식별자를 모두 WORD로 읽는다.
-    private enum Kind { WORD, STRING, INTEGER, OPEN, CLOSE, COMMA, STAR, EQUALS, SEMICOLON, END }
+    private enum Kind {
+        WORD, STRING, INTEGER, OPEN, CLOSE, COMMA, STAR, SEMICOLON, END,
+        EQUALS, NOT_EQUALS, LESS, LESS_OR_EQUAL, GREATER, GREATER_OR_EQUAL
+    }
 
     // 토큰의 offset은 원문에서 0부터 센다. 오류 메시지에는 1부터 센 위치를 표시한다.
     private record Token(Kind kind, String text, int offset) {
@@ -45,8 +47,12 @@ public final class SqlParser {
                 statements.add(insert());
             } else if (takeWord("select")) {
                 statements.add(select());
+            } else if (takeWord("update")) {
+                statements.add(update());
+            } else if (takeWord("delete")) {
+                statements.add(delete());
             } else {
-                throw current.error("Expected INSERT or SELECT");
+                throw current.error("Expected INSERT, SELECT, UPDATE or DELETE");
             }
 
             // 문장 사이에는 구분자가 필요하다. 마지막 문장은 세미콜론 없이 끝나도 된다.
@@ -79,14 +85,51 @@ public final class SqlParser {
         expectWord("from"); // WORD의 내용이 기대한 키워드와 맞을 때만 소비한다. 대소문자 차이는 허용한다.
 
         String table = identifier();
-        // Optional.empty()로 시작하고, WHERE를 읽으면 조건 객체를 Optional.of(...)에 담는다.
-        Optional<Statement.Condition> where = Optional.empty();
+        var where = new ArrayList<Statement.Condition>();
         if (takeWord("where")) {
-            String column = identifier();
-            expect(Kind.EQUALS, "'='");
-            where = Optional.of(new Statement.Condition(column, literal()));
+            // AND마다 비교 하나를 더 읽는다. 실행기가 모든 비교를 만족하는 행을 고른다.
+            do {
+                where.add(new Statement.Condition(identifier(), comparison(), literal()));
+            } while (takeWord("and"));
         }
         return new Statement.Select(table, columns, where);
+    }
+
+    private Statement.Update update() {
+        String table = identifier();
+        expectWord("set");
+        String column = identifier();
+        expect(Kind.EQUALS, "'='");
+        Object value = literal();
+        return new Statement.Update(table, column, value, requiredId());
+    }
+
+    private Statement.Delete delete() {
+        expectWord("from");
+        String table = identifier();
+        return new Statement.Delete(table, requiredId());
+    }
+
+    // UPDATE와 DELETE는 WHERE id = 정수 형태로 대상 행을 지정한다.
+    private long requiredId() {
+        expectWord("where");
+        expectWord("id");
+        expect(Kind.EQUALS, "'='");
+        return integer(expect(Kind.INTEGER, "an integer ID"));
+    }
+
+    private Statement.Operator comparison() {
+        Statement.Operator operator = switch (current.kind()) {
+            case EQUALS -> Statement.Operator.EQ;
+            case NOT_EQUALS -> Statement.Operator.NE;
+            case LESS -> Statement.Operator.LT;
+            case LESS_OR_EQUAL -> Statement.Operator.LE;
+            case GREATER -> Statement.Operator.GT;
+            case GREATER_OR_EQUAL -> Statement.Operator.GE;
+            default -> throw current.error("Expected a comparison operator");
+        };
+        advance();
+        return operator;
     }
 
     // Supplier<T>는 인자 없이 항목 하나를 읽는 함수다. 넘긴 메서드의 반환형이 T를 결정한다.
@@ -110,18 +153,19 @@ public final class SqlParser {
         if (take(Kind.STRING)) {
             return token.text();
         }
-        if (token.kind() == Kind.INTEGER) {
-            long value;
-            try {
-                value = Long.parseLong(token.text());
-            } catch (NumberFormatException exception) {
-                throw token.error("Integer outside the BIGINT range");
-            }
-            advance();
+        if (take(Kind.INTEGER)) {
             // 반환 타입이 Object라서 기본형 long이 Long 객체로 변환된다.
-            return value;
+            return integer(token);
         }
         throw token.error("Expected a string or integer");
+    }
+
+    private static long integer(Token token) {
+        try {
+            return Long.parseLong(token.text());
+        } catch (NumberFormatException exception) {
+            throw token.error("Integer outside the BIGINT range");
+        }
     }
 
     private void expectWord(String word) {
@@ -187,6 +231,10 @@ public final class SqlParser {
                 case ',' -> Kind.COMMA;
                 case '*' -> Kind.STAR;
                 case '=' -> Kind.EQUALS;
+                case '<' -> takeCharacter('=') ? Kind.LESS_OR_EQUAL
+                        : takeCharacter('>') ? Kind.NOT_EQUALS : Kind.LESS;
+                case '>' -> takeCharacter('=') ? Kind.GREATER_OR_EQUAL : Kind.GREATER;
+                case '!' -> takeCharacter('=') ? Kind.NOT_EQUALS : null;
                 case ';' -> Kind.SEMICOLON;
                 default -> null;
             };
@@ -246,6 +294,15 @@ public final class SqlParser {
                     return;
                 }
             }
+        }
+
+        // 다음 문자가 맞을 때만 소비하므로 >= 같은 두 글자 연산자를 한 토큰으로 읽는다.
+        private boolean takeCharacter(char expected) {
+            if (position >= sql.length() || sql.charAt(position) != expected) {
+                return false;
+            }
+            position++;
+            return true;
         }
 
         private static boolean isDigit(char character) {

@@ -67,6 +67,8 @@ public final class Main {
     private static void printResult(SqlEngine.Result result, PrintStream out) {
         switch (result) {
             case SqlEngine.Inserted inserted -> out.println("INSERT 1 (id=" + inserted.id() + ")");
+            case SqlEngine.Updated updated -> out.println("UPDATE " + updated.count());
+            case SqlEngine.Deleted deleted -> out.println("DELETE " + deleted.count());
             case SqlEngine.Selected selected -> {
                 out.println(String.join("\t", selected.columns()));
                 for (var row : selected.rows()) {
