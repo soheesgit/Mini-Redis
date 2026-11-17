@@ -1,38 +1,38 @@
-#!/bin/bash
-# Mini Redis 서버를 띄우고, Mini DBMS가 그 서버를 SELECT 캐시로 쓰게 실행한다. 끝나면 서버를 내린다.
-# 사용: ./scripts/run-dbms-with-redis.sh <sql 파일> [<sql 파일> ...]
-#       SQL 파일마다 DBMS 프로세스를 하나씩 따로 띄운다 (두 번째 프로세스부터 캐시 HIT가 보인다)
-# 환경변수: JAVA_HOME(JDK 25), REDIS_PORT(기본 8090), DBMS_DATA(기본 mini-dbms/data), REDIS_DATA(기본 mini-dbms/data/redis)
+#!/usr/bin/env bash
+# SQL 파일마다 독립 DBMS 프로세스를 실행해 Redis 캐시를 공유한다.
+# JAVA_HOME(JDK 25+), MVN, REDIS_PORT, DBMS_DATA, REDIS_DATA로 실행 환경 지정.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-JDK="${JAVA_HOME:-$HOME/tools/jdk-25.0.5+8/Contents/Home}" # mini-redis가 Java 25로 컴파일되므로 25가 필요하다
-JAVA="$JDK/bin/java"
-MVN="$HOME/tools/apache-maven-3.9.16/bin/mvn"
-[ -x "$MVN" ] || MVN=mvn
+JAVA="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+MVN="${MVN:-mvn}"
 PORT="${REDIS_PORT:-8090}"
 DBMS_DATA="${DBMS_DATA:-$ROOT/mini-dbms/data}"
-REDIS_DATA="${REDIS_DATA:-$ROOT/mini-dbms/data/redis}"
-
+REDIS_DATA="${REDIS_DATA:-$DBMS_DATA/redis}"
 [ $# -ge 1 ] || { echo "사용: $0 <sql 파일> [<sql 파일> ...]" >&2; exit 2; }
-
-# 1. 두 프로젝트를 각자 방식으로 빌드한다 (서로의 코드를 참조하지 않는다)
-(cd "$ROOT/mini-redis" && JAVA_HOME="$JDK" "$MVN" -q compile)
-(cd "$ROOT/mini-dbms" && mkdir -p out/main && find src/main/java -name '*.java' > out/main-sources.txt \
-  && "$JDK/bin/javac" --release 21 -encoding UTF-8 -d out/main @out/main-sources.txt)
-
-# 2. Mini Redis 서버를 띄우고, 스크립트가 어떻게 끝나든 내린다
+for sql in "$@"; do
+  [ -r "$sql" ] || { echo "SQL 파일을 읽을 수 없습니다: $sql" >&2; exit 2; }
+done
+"$MVN" -q -f "$ROOT/mini-redis/pom.xml" compile
+"$MVN" -q -f "$ROOT/mini-dbms/pom.xml" compile
 mkdir -p "$REDIS_DATA"
-"$JAVA" -cp "$ROOT/mini-redis/target/classes" miniredis.Main --addr "127.0.0.1:$PORT" --dir "$REDIS_DATA" &
+REDIS_LOG="$(mktemp)"
+"$JAVA" -cp "$ROOT/mini-redis/target/classes" miniredis.Main --addr "127.0.0.1:$PORT" --dir "$REDIS_DATA" >"$REDIS_LOG" 2>&1 &
 REDIS_PID=$!
-trap 'kill $REDIS_PID 2>/dev/null; wait $REDIS_PID 2>/dev/null || true' EXIT
-for _ in $(seq 1 50); do
-  curl -s -o /dev/null "http://127.0.0.1:$PORT/ping" && break
-  kill -0 $REDIS_PID 2>/dev/null || { echo "Mini Redis가 시작하지 못했다" >&2; exit 1; }
+trap 'kill "$REDIS_PID" 2>/dev/null || true; wait "$REDIS_PID" 2>/dev/null || true; rm -f "$REDIS_LOG"' EXIT
+ready=false
+for ((i=0; i<50; i++)); do
+  kill -0 "$REDIS_PID" 2>/dev/null || { cat "$REDIS_LOG" >&2; echo "Mini Redis가 시작하지 못했습니다" >&2; exit 1; }
+  if grep -q "mini-redis listening on" "$REDIS_LOG"; then
+    ready=true
+    break
+  fi
   sleep 0.2
 done
-
-# 3. SQL 파일마다 DBMS 프로세스를 따로 실행한다. 캐시 통계(cache: hits=.. misses=..)는 stderr로 나온다
+[ "$ready" = true ] || { echo "Mini Redis 시작 시간이 초과되었습니다" >&2; exit 1; }
+# 이미 쓰는 포트로 서버 시작이 실패했으면 다른 서버에 연결하지 않는다.
+kill -0 "$REDIS_PID" 2>/dev/null || { echo "Mini Redis가 종료되었습니다" >&2; exit 1; }
+cat "$REDIS_LOG"
 for sql in "$@"; do
   echo "=== $sql"
-  MINIDBMS_REDIS="http://127.0.0.1:$PORT" "$JAVA" -cp "$ROOT/mini-dbms/out/main" minidbms.cli.Main --data-dir "$DBMS_DATA" "$sql"
+  MINIDBMS_REDIS="http://127.0.0.1:$PORT" "$JAVA" -cp "$ROOT/mini-dbms/target/classes" minidb.cli.Main --data-dir "$DBMS_DATA" "$sql"
 done

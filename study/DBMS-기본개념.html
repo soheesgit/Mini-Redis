@@ -1,0 +1,894 @@
+<title>DBMS 첫걸음</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 한 줄 읽기 칼럼 + 섹션마다 직접 눌러 보는 패널. 색은 청록(데이터) + 호박(커밋/주의) + 빨강(장애) */
+:root {
+  --bg: #f3f6f5; --surface: #ffffff; --ink: #14201e; --muted: #56635f; --line: #d3ddda;
+  --accent: #0b6b61; --accent-soft: #d9eeea;
+  --warn: #9a5800; --warn-soft: #fbebd2;
+  --bad: #b42318; --bad-soft: #fbe2df;
+  --good: #1b743a; --good-soft: #def1e3;
+  --code-bg: #e8efed;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1413; --surface: #151d1c; --ink: #e2eae8; --muted: #98a6a2; --line: #2a3533;
+  --accent: #52c3b5; --accent-soft: #163a35;
+  --warn: #e6a64f; --warn-soft: #3a2b15;
+  --bad: #f17c70; --bad-soft: #3e1d1a;
+  --good: #6fca8c; --good-soft: #173222;
+  --code-bg: #1b2524; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1413; --surface: #151d1c; --ink: #e2eae8; --muted: #98a6a2; --line: #2a3533;
+  --accent: #52c3b5; --accent-soft: #163a35;
+  --warn: #e6a64f; --warn-soft: #3a2b15;
+  --bad: #f17c70; --bad-soft: #3e1d1a;
+  --good: #6fca8c; --good-soft: #173222;
+  --code-bg: #1b2524; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere; }
+.wrap { max-width: 820px; margin: 0 auto; padding-block: 48px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.35; margin: 0; }
+h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.5rem; font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--f-mono); font-size: 0.92em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 16px; }
+.eyebrow { font-size: 0.8rem; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.lede { font-size: 1.08rem; color: var(--muted); }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; border-top: 2px solid var(--ink); padding-top: 14px; }
+.chip { font-size: 0.8rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.chip.min { background: var(--code-bg); color: var(--muted); }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 10px 14px; border-radius: 0 6px 6px 0; }
+.note b { color: var(--warn); }
+.term { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; background: var(--surface); }
+.term b { color: var(--accent); }
+ul, ol { margin: 0; padding-left: 1.3em; max-width: 68ch; }
+li + li { margin-top: 4px; }
+
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.94rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.85rem; border-bottom: 1.5px solid var(--ink); white-space: nowrap; }
+td.c, th.c { text-align: center; }
+.y { color: var(--bad); font-weight: 600; }
+.n { color: var(--good); font-weight: 600; }
+
+/* 직접 해 보는 패널 */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.panel-title { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, input, select { font: inherit; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.92rem; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-right: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 12px; cursor: pointer; font-size: 0.9rem; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); font-weight: 600; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="number"] { width: 5.5em; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+label { font-size: 0.92rem; color: var(--muted); }
+.svgbox { overflow-x: auto; }
+.svgbox svg { display: block; min-width: 600px; width: 100%; height: auto; }
+
+/* 아키텍처 그림 */
+.band { fill: none; stroke: var(--line); stroke-dasharray: 5 4; }
+.band-label { fill: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.05em; }
+.node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; transition: fill .25s, stroke .25s; }
+.node text { fill: var(--ink); font-size: 14px; font-weight: 500; font-family: var(--f-body); }
+.node.on rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.5; }
+.node.on text { fill: var(--accent); font-weight: 700; }
+.wire { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.arrowhead { fill: var(--muted); }
+.step-card { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; display: flex; flex-direction: column; gap: 8px; min-height: 11.5em; }
+.step-no { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.flow { font-family: var(--f-mono); font-size: 0.88rem; background: var(--code-bg); padding: 6px 10px; border-radius: 6px; }
+.why { color: var(--muted); font-size: 0.94rem; }
+.why b { color: var(--ink); }
+
+/* B+트리 */
+.bt-node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; transition: fill .2s, stroke .2s; }
+.bt-node text { fill: var(--ink); font-family: var(--f-mono); font-size: 13px; }
+.bt-node.on rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.5; }
+.bt-node.hit rect { fill: var(--good-soft); stroke: var(--good); stroke-width: 2.5; }
+.bt-node.miss rect { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 2.5; }
+.bt-edge { stroke: var(--line); stroke-width: 1.5; }
+.bt-edge.on { stroke: var(--accent); stroke-width: 2.5; }
+.bt-link { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.bt-cap { fill: var(--muted); font-size: 11px; }
+.log { font-family: var(--f-mono); font-size: 0.86rem; background: var(--code-bg); border-radius: 6px; padding: 10px 12px; margin: 0; list-style: none; min-height: 5em; }
+.log li + li { margin-top: 2px; }
+.stat { font-variant-numeric: tabular-nums; font-size: 0.95rem; }
+.stat b { color: var(--accent); }
+
+/* 장애 시뮬레이터 */
+.steps { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.steps li { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); margin: 0; }
+.steps li.done { background: var(--accent-soft); border-color: transparent; }
+.steps li.lost { opacity: 0.45; text-decoration: line-through; }
+.steps .k { font-family: var(--f-mono); font-size: 0.8rem; color: var(--muted); width: 1.5em; }
+.crash-line { color: var(--bad); font-weight: 700; font-size: 0.85rem; border: 0 !important; padding: 0 10px !important; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tile .lab { font-size: 0.8rem; color: var(--muted); }
+.tile .val { font-family: var(--f-mono); font-size: 1.15rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.verdict { border-radius: 8px; padding: 10px 14px; font-weight: 500; }
+.verdict.good { background: var(--good-soft); color: var(--good); }
+.verdict.bad { background: var(--bad-soft); color: var(--bad); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.two > * { min-width: 0; }
+
+/* 격리 수준 타임라인 */
+.tl td { font-family: var(--f-mono); font-size: 0.85rem; }
+.tl td:first-child { color: var(--muted); width: 3em; }
+.tl .r { padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+.tl .r.bad { background: var(--bad-soft); color: var(--bad); }
+.tl .r.good { background: var(--good-soft); color: var(--good); }
+
+details.quiz { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+details.quiz summary { cursor: pointer; padding: 10px 14px; font-weight: 500; }
+details.quiz summary::marker { color: var(--accent); }
+details.quiz > div { padding: 0 14px 12px; color: var(--ink); border-top: 1px dashed var(--line); padding-top: 10px; }
+.qa { display: flex; flex-direction: column; gap: 8px; }
+.src { font-size: 0.88rem; color: var(--muted); }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.7rem; }
+  .two { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: 1fr 1fr 1fr; }
+  .tile .val { font-size: 0.95rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:14px">
+  <div class="eyebrow">DBMS 기본 개념 · 총 90분</div>
+  <h1>계좌 이체 한 번으로 보는 DBMS</h1>
+  <p class="lede">"A 계좌에서 B 계좌로 1만 원 보내기"가 DBMS 안에서 어떤 길을 지나가는지 먼저 한 장으로 보고, 시험과 면접에 가장 많이 나오는 세 곳(저장 구조, 트랜잭션, 동시성)을 직접 눌러 보며 이해합니다.</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>섹션</th><th>내용</th><th class="c">깊이</th><th class="c">분</th></tr></thead>
+    <tbody>
+      <tr><td><a href="#s0">S0</a></td><td>전체 지도: SQL 한 줄이 지나가는 길</td><td class="c">-</td><td class="c">10</td></tr>
+      <tr><td><a href="#s1">S1</a></td><td>DBMS가 왜 필요한가</td><td class="c">★</td><td class="c">5</td></tr>
+      <tr><td><a href="#s2">S2</a></td><td>관계형 모델과 SQL</td><td class="c">★★</td><td class="c">10</td></tr>
+      <tr><td><a href="#s3">S3</a></td><td>저장 구조: 페이지, 버퍼 풀, 인덱스</td><td class="c">★★★</td><td class="c">15</td></tr>
+      <tr><td><a href="#s4">S4</a></td><td>트랜잭션과 ACID</td><td class="c">★★★</td><td class="c">15</td></tr>
+      <tr><td><a href="#s5">S5</a></td><td>동시성: 락, 격리 수준, 이상 현상</td><td class="c">★★★</td><td class="c">15</td></tr>
+      <tr><td><a href="#s6">S6</a></td><td>장애 복구: WAL, redo/undo, 체크포인트</td><td class="c">★★</td><td class="c">10</td></tr>
+      <tr><td><a href="#s7">S7</a></td><td>정규화·ER (훑기)</td><td class="c">★</td><td class="c">5</td></tr>
+      <tr><td><a href="#qa">Q&amp;A</a></td><td>예상 질문 다시 보기</td><td class="c"></td><td class="c">5</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="why"><b>왜 S3~S5를 깊게 보나.</b> 수업·면접에서 가장 자주 묻고, 이미 아는 것과 바로 이어지기 때문입니다. CS:APP의 페이지·캐시는 버퍼 풀로, Pintos의 lock·동기화는 DBMS 락으로 연결됩니다. 미니 Redis에서 만든 AOF는 S6의 WAL과 같은 생각이라 S6는 짧게 잡았습니다.</p>
+  <p class="why"><b>이번에 건너뛰는 것.</b> 관계 대수, 조인 알고리즘(nested loop/hash/merge), 옵티마이저 비용 계산식, 분산 DB. 기본 흐름을 잡은 뒤에 보면 됩니다.</p>
+</header>
+
+<!-- S0 -->
+<section id="s0">
+  <div class="sec-head"><h2>S0. 전체 지도</h2><span class="chip min">10분</span></div>
+  <p>앱이 아래 SQL을 보냈다고 합시다. 7번 계좌(A)에서 1만 원을 빼는 문장입니다. <b>다음</b>을 눌러 이 문장이 DBMS 안의 누구를 거치는지 따라가 보세요.</p>
+  <p class="flow">UPDATE accounts SET balance = balance - 10000 WHERE id = 7;  …  COMMIT;</p>
+
+  <div class="panel">
+    <div class="panel-title">직접 해 보기 · 단계별로 넘기기</div>
+    <div class="svgbox">
+    <svg viewBox="0 0 680 360" role="img" aria-label="DBMS 내부 구조: 쿼리 처리기, 저장 엔진, 디스크">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="band" x="185" y="12" width="485" height="100" rx="8"/><text class="band-label" x="197" y="32">쿼리 처리기 (Query Processor)</text>
+      <rect class="band" x="185" y="128" width="485" height="110" rx="8"/><text class="band-label" x="197" y="148">저장 엔진 (Storage Engine) · 메모리</text>
+      <rect class="band" x="185" y="254" width="485" height="96" rx="8"/><text class="band-label" x="197" y="274">디스크 (꺼져도 남음)</text>
+      <path class="wire" d="M160,70 L198,70" marker-end="url(#ah)"/>
+      <path class="wire" d="M330,70 L348,70" marker-end="url(#ah)"/>
+      <path class="wire" d="M480,70 L498,70" marker-end="url(#ah)"/>
+      <path class="wire" d="M350,227 L350,283" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <path class="wire" d="M590,227 L590,283" marker-end="url(#ah)"/>
+      <g class="node" id="n-client"><rect x="20" y="45" width="140" height="50" rx="8"/><text x="90" y="75" text-anchor="middle">클라이언트(앱)</text></g>
+      <g class="node" id="n-parser"><rect x="200" y="45" width="130" height="50" rx="8"/><text x="265" y="75" text-anchor="middle">파서</text></g>
+      <g class="node" id="n-optimizer"><rect x="350" y="45" width="130" height="50" rx="8"/><text x="415" y="75" text-anchor="middle">옵티마이저</text></g>
+      <g class="node" id="n-executor"><rect x="500" y="45" width="150" height="50" rx="8"/><text x="575" y="75" text-anchor="middle">실행기</text></g>
+      <g class="node" id="n-buffer"><rect x="200" y="165" width="180" height="60" rx="8"/><text x="290" y="200" text-anchor="middle">버퍼 풀</text></g>
+      <g class="node" id="n-lock"><rect x="395" y="165" width="120" height="60" rx="8"/><text x="455" y="200" text-anchor="middle">락 매니저</text></g>
+      <g class="node" id="n-log"><rect x="530" y="165" width="125" height="60" rx="8"/><text x="592" y="200" text-anchor="middle">로그 매니저</text></g>
+      <g class="node" id="n-data"><rect x="200" y="285" width="180" height="50" rx="8"/><text x="290" y="315" text-anchor="middle">데이터 파일</text></g>
+      <g class="node" id="n-logfile"><rect x="530" y="285" width="125" height="50" rx="8"/><text x="592" y="315" text-anchor="middle">로그 파일</text></g>
+    </svg>
+    </div>
+    <div class="step-card" aria-live="polite">
+      <div class="step-no" id="st-no"></div>
+      <h3 id="st-title"></h3>
+      <div class="flow" id="st-flow"></div>
+      <p id="st-body"></p>
+      <p class="why" id="st-why"></p>
+    </div>
+    <div class="row">
+      <button class="btn" id="st-prev" type="button">← 이전</button>
+      <button class="btn primary" id="st-next" type="button">다음 →</button>
+      <span class="why">키보드 ← → 도 됩니다</span>
+    </div>
+  </div>
+
+  <p>이 지도에서 꼭 가져갈 것은 두 가지입니다.</p>
+  <ul>
+    <li><b>층이 나뉘어 있다.</b> 위층(쿼리 처리기)은 "무엇을 어떻게 찾을지"를 정하고, 아래층(저장 엔진)은 "메모리와 디스크 사이에서 안전하게 옮기는 일"을 합니다.</li>
+    <li><b>COMMIT 응답은 로그가 디스크에 닿은 뒤에 나간다.</b> 데이터 파일은 나중에 씁니다. 이 순서가 S4·S6의 핵심입니다.</li>
+  </ul>
+  <details class="quiz"><summary>확인 질문: COMMIT에 "성공" 응답이 나간 순간, 데이터 파일에는 새 잔액이 쓰여 있을까?</summary>
+    <div>꼭 그렇지 않습니다. 응답 전에 확실히 디스크에 쓰는 것은 <b>로그</b>입니다. 데이터 파일의 페이지(dirty 페이지)는 나중에 백그라운드에서 씁니다. 그 사이에 장애가 나면 로그로 다시 만듭니다(redo).</div>
+  </details>
+</section>
+
+<!-- S1 -->
+<section id="s1">
+  <div class="sec-head"><h2>S1. DBMS가 왜 필요한가</h2><span class="chip">★</span><span class="chip min">5분</span></div>
+  <div class="term"><b>용어부터.</b> 데이터베이스(DB)는 <i>모아 둔 데이터</i> 자체, DBMS(Database Management System)는 <i>그 데이터를 관리하는 프로그램</i>(MySQL, PostgreSQL 등)입니다. 일상에서는 둘 다 "DB"라고 부르지만 시험에서는 구분합니다.</div>
+  <p>은행 앱을 파일 하나(<code>accounts.txt</code>)로 만든다고 생각해 보세요. 처음엔 되지만 곧 이런 문제가 생깁니다.</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>파일로 직접 하면 깨지는 것</th><th>예</th><th>DBMS가 대신 해 주는 것</th></tr></thead>
+    <tbody>
+      <tr><td>동시 접근</td><td>두 프로그램이 같은 줄을 동시에 고쳐 한쪽 수정이 사라짐</td><td>락·MVCC로 동시성 제어 (S5)</td></tr>
+      <tr><td>중간 장애</td><td>A에서 뺀 직후 전원이 나가 돈이 증발</td><td>트랜잭션·로그로 원자성과 복구 (S4, S6)</td></tr>
+      <tr><td>검색 코드 중복</td><td>프로그램마다 "id가 7인 줄 찾기"를 직접 짬</td><td>SQL 한 줄 + 인덱스 (S2, S3)</td></tr>
+      <tr><td>형식 변경</td><td>파일에 열 하나 추가하면 읽는 프로그램이 전부 깨짐</td><td>데이터 독립성 (아래 3단계 스키마)</td></tr>
+      <tr><td>중복과 불일치</td><td>고객 주소가 파일 세 곳에 있고 한 곳만 바뀜</td><td>정규화된 설계, 제약 조건 (S7)</td></tr>
+      <tr><td>권한</td><td>누구나 파일 전체를 읽음</td><td>사용자별 권한(GRANT)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>3단계 스키마와 데이터 독립성</h3>
+  <p>정보처리 자격증에서 본 그 내용입니다. 층을 나눠 두면 한 층을 바꿔도 다른 층이 깨지지 않습니다.</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>층</th><th>누가 보는 모습</th><th>바꿔도 안 깨지는 것</th></tr></thead>
+    <tbody>
+      <tr><td>외부 스키마</td><td>앱·사용자마다 보는 일부 (뷰)</td><td rowspan="2">개념 스키마에 열을 추가해도 앱이 그대로 동작 → <b>논리적 독립성</b></td></tr>
+      <tr><td>개념 스키마</td><td>전체 테이블·관계·제약 (DB 설계자)</td></tr>
+      <tr><td>내부 스키마</td><td>디스크에 어떻게 저장되나 (페이지, 인덱스)</td><td>인덱스를 추가하거나 저장 방식을 바꿔도 SQL이 그대로 → <b>물리적 독립성</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <details class="quiz"><summary>확인 질문: 테이블에 인덱스를 새로 만들었는데 앱 코드는 한 줄도 안 바꿔도 된다. 어떤 독립성 덕분인가?</summary>
+    <div><b>물리적 데이터 독립성.</b> 인덱스는 내부 스키마(저장 방식)의 일입니다. SQL은 "무엇을"만 말하므로, 저장 방식이 바뀌어도 그대로 동작합니다.</div>
+  </details>
+</section>
+
+<!-- S2 -->
+<section id="s2">
+  <div class="sec-head"><h2>S2. 관계형 모델과 SQL</h2><span class="chip">★★</span><span class="chip min">10분</span></div>
+  <div class="term"><b>"관계(relation)"의 뜻.</b> 일상에서는 "사이·연결"이지만, 관계형 모델에서 relation은 <i>테이블 그 자체</i>를 말합니다. 테이블끼리 이어진다는 뜻이 아닙니다(그건 FK가 합니다).</div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>이론 용어</th><th>실무 용어</th><th>예</th></tr></thead>
+    <tbody>
+      <tr><td>릴레이션</td><td>테이블</td><td><code>accounts</code></td></tr>
+      <tr><td>튜플</td><td>행(row), 레코드</td><td>(7, 지호, 100000)</td></tr>
+      <tr><td>애트리뷰트</td><td>열(column)</td><td><code>balance</code></td></tr>
+      <tr><td>도메인</td><td>열이 가질 수 있는 값의 범위</td><td>balance는 0 이상의 정수</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>키: 행을 하나로 짚는 방법</h3>
+  <div class="two">
+    <div class="tbl"><table>
+      <thead><tr><th colspan="3">users</th></tr><tr><th>id (PK)</th><th>name</th><th>email</th></tr></thead>
+      <tbody><tr><td>1</td><td>지호</td><td>j@ex.com</td></tr><tr><td>2</td><td>민수</td><td>m@ex.com</td></tr></tbody>
+    </table></div>
+    <div class="tbl"><table>
+      <thead><tr><th colspan="3">accounts</th></tr><tr><th>id (PK)</th><th>user_id (FK)</th><th>balance</th></tr></thead>
+      <tbody><tr><td>7</td><td>1</td><td>100,000</td></tr><tr><td>8</td><td>2</td><td>100,000</td></tr></tbody>
+    </table></div>
+  </div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>키</th><th>뜻</th><th>위 예에서</th></tr></thead>
+    <tbody>
+      <tr><td>슈퍼키</td><td>행을 유일하게 구분하는 열 묶음 (군더더기 있어도 됨)</td><td>(id), (id, name), (email) …</td></tr>
+      <tr><td>후보키</td><td>슈퍼키 중 더 줄일 수 없는 것 (최소성)</td><td>users의 id, email</td></tr>
+      <tr><td>기본키 (PK)</td><td>후보키 중 대표로 고른 하나. NULL 불가, 중복 불가</td><td>users.id</td></tr>
+      <tr><td>외래키 (FK)</td><td>다른 테이블의 PK를 가리키는 열</td><td>accounts.user_id → users.id</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><b>무결성 제약</b>이 키를 지켜 줍니다. PK는 비거나 겹치면 안 되고(개체 무결성), FK는 존재하는 행만 가리켜야 합니다(참조 무결성). users에서 1번을 지우려 하면, 1번을 가리키는 계좌가 남아 있으므로 DBMS가 거부하거나(RESTRICT) 같이 지웁니다(CASCADE). <b>안 하면?</b> 주인 없는 계좌가 생깁니다.</p>
+
+  <h3>SQL은 "무엇을"만 말한다</h3>
+  <p>C에서는 "배열을 처음부터 돌면서 id가 7이면 멈춰라"처럼 <i>방법</i>을 씁니다. SQL은 <code>WHERE id = 7</code>처럼 <i>원하는 결과</i>만 씁니다(선언형). 방법은 S0의 옵티마이저가 고릅니다. 그래서 인덱스를 추가하면 같은 SQL이 갑자기 빨라집니다.</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>분류</th><th>하는 일</th><th>명령</th></tr></thead>
+    <tbody>
+      <tr><td>DDL (정의)</td><td>테이블 구조 만들기·바꾸기</td><td><code>CREATE</code> <code>ALTER</code> <code>DROP</code></td></tr>
+      <tr><td>DML (조작)</td><td>행 읽기·쓰기</td><td><code>SELECT</code> <code>INSERT</code> <code>UPDATE</code> <code>DELETE</code></td></tr>
+      <tr><td>DCL (제어)</td><td>권한, 트랜잭션</td><td><code>GRANT</code> <code>REVOKE</code> <code>COMMIT</code> <code>ROLLBACK</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <details class="quiz"><summary>확인 질문 1: users에 email이 유일하다면 email은 후보키인가? 기본키가 될 수도 있나?</summary>
+    <div>후보키가 맞습니다(유일하고, 열 하나라 더 줄일 수 없음). 기본키로 고를 수도 있지만 보통은 바뀔 일이 없는 id를 고릅니다. 이메일은 사용자가 바꿀 수 있고, PK가 바뀌면 그걸 가리키는 FK를 모두 고쳐야 하기 때문입니다.</div>
+  </details>
+  <details class="quiz"><summary>확인 질문 2: accounts에 user_id = 99(없는 사용자)인 행을 넣으려 하면?</summary>
+    <div>FK 제약이 있으면 <b>참조 무결성 위반</b>으로 INSERT가 실패합니다.</div>
+  </details>
+</section>
+
+<!-- S3 -->
+<section id="s3">
+  <div class="sec-head"><h2>S3. 저장 구조: 페이지, 버퍼 풀, 인덱스</h2><span class="chip">★★★</span><span class="chip min">15분</span></div>
+  <p>출발점은 하나입니다. <b>디스크는 메모리보다 훨씬 느리다.</b> 저장 엔진의 설계는 거의 다 "디스크를 덜 읽고, 읽을 땐 크게 읽자"에서 나옵니다.</p>
+
+  <h3>페이지: 디스크와 주고받는 단위</h3>
+  <p>DBMS는 행 하나가 아니라 <b>페이지</b>(블록) 단위로 읽고 씁니다. InnoDB의 기본 페이지 크기는 16KB입니다. 한 페이지에 행이 수십~수백 개 들어갑니다. CS:APP의 가상 메모리 페이지와 이름도, 이유도 같습니다.</p>
+
+  <h3>버퍼 풀: DBMS가 직접 관리하는 페이지 캐시</h3>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>상황</th><th>버퍼 풀이 하는 일</th></tr></thead>
+    <tbody>
+      <tr><td>필요한 페이지가 메모리에 있음 (hit)</td><td>바로 돌려줌. 디스크 안 감</td></tr>
+      <tr><td>없음 (miss)</td><td>디스크에서 페이지를 읽어 빈 칸에 올림</td></tr>
+      <tr><td>빈 칸이 없음</td><td>오래 안 쓴 페이지를 내보냄 (LRU 계열). dirty면 먼저 디스크에 씀</td></tr>
+      <tr><td>페이지를 수정함</td><td>dirty 표시만 하고, 디스크에는 나중에 씀</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="why"><b>OS 페이지 캐시가 있는데 왜 따로 두나?</b> DBMS는 "이 페이지는 로그가 디스크에 닿기 전엔 내보내면 안 된다"(WAL 규칙, S6) 같은 순서를 지켜야 합니다. OS는 그걸 모릅니다. 그래서 언제 쓰고 언제 내보낼지를 DBMS가 직접 정합니다.</p>
+
+  <h3>인덱스: 전체를 읽지 않고 찾기</h3>
+  <p>인덱스가 없으면 <code>WHERE id = 33</code>을 찾으려고 테이블의 모든 페이지를 읽어야 합니다(full scan). 인덱스는 책 뒤의 찾아보기처럼 "33은 이 페이지에 있다"를 알려 주는 별도 구조입니다. 대부분의 DBMS는 기본 인덱스로 <b>B+트리</b>를 씁니다.</p>
+
+  <div class="panel">
+    <div class="panel-title">직접 해 보기 · B+트리에서 키 찾기</div>
+    <div class="svgbox"><svg id="bt" viewBox="0 0 720 262" role="img" aria-label="높이 3인 B+트리"></svg></div>
+    <div class="row">
+      <label for="bt-key">찾을 id</label><input type="number" id="bt-key" min="1" max="99" value="33">
+      <button class="btn primary" id="bt-find" type="button">찾기</button>
+      <span style="width:12px"></span>
+      <label for="bt-lo">범위</label><input type="number" id="bt-lo" min="1" max="99" value="20">
+      <label for="bt-hi">~</label><input type="number" id="bt-hi" min="1" max="99" value="46">
+      <button class="btn" id="bt-range" type="button">범위 찾기</button>
+    </div>
+    <ol class="log" id="bt-log" aria-live="polite"><li>id를 넣고 "찾기"를 눌러 보세요. 33, 15, 34(없는 값)를 차례로 해 보면 좋습니다.</li></ol>
+    <div class="stat" id="bt-stat"></div>
+  </div>
+
+  <ul>
+    <li><b>안쪽 노드</b>는 길 안내만 합니다. 키 40이 있으면 "40보다 작으면 왼쪽, 크거나 같으면 오른쪽"입니다.</li>
+    <li><b>리프 노드</b>에 실제 키가 다 있고, 리프끼리 옆으로 이어져 있습니다(점선). 그래서 범위 검색은 시작 리프만 찾고 옆으로 쭉 읽으면 됩니다.</li>
+    <li><b>노드 하나 = 페이지 하나.</b> 16KB 페이지에 키와 포인터가 수백 개 들어가므로 자식이 수백 개입니다. 자식이 500개씩이면 높이 3에 500³ ≈ 1억 2500만 개 키가 들어갑니다. 1억 행에서도 페이지 3~4개만 읽으면 찾습니다.</li>
+  </ul>
+
+  <div class="tbl">
+  <table>
+    <thead><tr><th></th><th>B+트리 인덱스</th><th>해시 인덱스</th></tr></thead>
+    <tbody>
+      <tr><td>같은 값 찾기 (=)</td><td>O(log n), 페이지 3~4개</td><td>O(1) 평균</td></tr>
+      <tr><td>범위 (BETWEEN, &lt;, &gt;)</td><td class="n">됨: 리프를 옆으로 읽음</td><td class="y">안 됨: 해시는 순서를 버림</td></tr>
+      <tr><td>정렬 (ORDER BY)</td><td class="n">이미 정렬돼 있음</td><td class="y">안 됨</td></tr>
+      <tr><td>미니 Redis와 연결</td><td>-</td><td>직접 만든 해시 테이블과 같은 성질</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><b>인덱스의 비용.</b> 읽기는 빨라지지만 INSERT·UPDATE·DELETE 때마다 인덱스도 같이 고쳐야 하고 공간도 듭니다. 그래서 "모든 열에 인덱스"는 답이 아닙니다.</p>
+  <details class="quiz"><summary>확인 질문 1: 버퍼 풀이 dirty 페이지를 내보내야 할 때, 그냥 버리면 안 되는 이유는?</summary>
+    <div>dirty 페이지에는 디스크에 아직 없는 수정 내용이 있습니다. 버리면 그 수정이 사라지므로 먼저 디스크에 써야 합니다(그리고 WAL 규칙상 그 수정의 로그가 먼저 디스크에 있어야 합니다).</div>
+  </details>
+  <details class="quiz"><summary>확인 질문 2: "가입일이 2026년 1월~3월인 사용자"를 자주 찾는다. 해시 인덱스와 B+트리 중 무엇을 거나?</summary>
+    <div><b>B+트리.</b> 범위 조회이기 때문입니다. 해시는 값을 흩어 놓아서 "1월~3월 사이"라는 순서 정보가 없습니다.</div>
+  </details>
+</section>
+
+<!-- S4 -->
+<section id="s4">
+  <div class="sec-head"><h2>S4. 트랜잭션과 ACID</h2><span class="chip">★★★</span><span class="chip min">15분</span></div>
+  <div class="term"><b>"트랜잭션"의 뜻.</b> 일상에서는 "거래"지만, DBMS에서는 <i>전부 되거나 전부 안 되어야 하는 작업 묶음</i>입니다. 이체의 "A에서 빼기 + B에 더하기"가 한 트랜잭션입니다.</div>
+  <p>아래에서 이체 도중 전원이 나가는 상황을 만들어 보세요. 트랜잭션이 없을 때와 있을 때 결과가 어떻게 다른지가 핵심입니다. 처음 잔액은 둘 다 100,000원, 합계는 늘 200,000원이어야 합니다.</p>
+
+  <div class="panel">
+    <div class="panel-title">직접 해 보기 · 이체 도중 장애 내기</div>
+    <div class="row">
+      <span class="seg" role="group" aria-label="방식">
+        <button type="button" data-mode="raw" aria-pressed="false">트랜잭션 없음</button>
+        <button type="button" data-mode="tx" aria-pressed="true">트랜잭션 + 로그</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="why">전원이 나가는 때:</span>
+      <span class="seg" role="group" aria-label="장애 시점">
+        <button type="button" data-crash="2" aria-pressed="true">2 끝난 뒤</button>
+        <button type="button" data-crash="3" aria-pressed="false">3 끝난 뒤</button>
+        <button type="button" data-crash="4" aria-pressed="false">4 끝난 뒤</button>
+      </span>
+    </div>
+    <div class="two">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="why">실행한 순서</div>
+        <ul class="steps" id="cr-steps"></ul>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="why">장애 순간 로그 파일에 있던 것</div>
+        <ol class="log" id="cr-log"></ol>
+        <div class="why" id="cr-action"></div>
+      </div>
+    </div>
+    <div class="why">재시작 후 잔액</div>
+    <div class="tiles">
+      <div class="tile"><div class="lab">A (7번)</div><div class="val" id="cr-a"></div></div>
+      <div class="tile"><div class="lab">B (8번)</div><div class="val" id="cr-b"></div></div>
+      <div class="tile"><div class="lab">합계</div><div class="val" id="cr-sum"></div></div>
+    </div>
+    <div class="verdict" id="cr-verdict" aria-live="polite"></div>
+  </div>
+
+  <h3>ACID: 트랜잭션이 지켜야 할 네 가지</h3>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>성질</th><th>뜻</th><th>이체에서</th><th>누가 지키나</th></tr></thead>
+    <tbody>
+      <tr><td><b>A</b>tomicity 원자성</td><td>전부 되거나 전부 안 되거나</td><td>A만 빠지고 B는 안 더해진 상태가 남지 않음</td><td>undo 로그 (복구 관리자)</td></tr>
+      <tr><td><b>C</b>onsistency 일관성</td><td>규칙을 지킨 상태 → 규칙을 지킨 상태</td><td>잔액 ≥ 0, 합계 200,000 유지</td><td>제약 조건 + 앱의 올바른 로직</td></tr>
+      <tr><td><b>I</b>solation 격리성</td><td>동시에 돌아도 서로 중간 상태를 못 봄</td><td>이체 중간(A만 빠진 순간)을 남이 못 봄</td><td>락·MVCC (동시성 제어, S5)</td></tr>
+      <tr><td><b>D</b>urability 지속성</td><td>COMMIT 응답 뒤엔 장애에도 남음</td><td>"이체 완료" 뒤 전원이 나가도 유지</td><td>redo 로그 + 커밋 때 fsync (S6)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="why"><b>C만 성격이 다릅니다.</b> A·I·D는 DBMS가 기계적으로 보장하지만, "합계가 유지돼야 한다"는 규칙은 앱이 올바른 SQL을 짜야 지켜집니다. DBMS는 CHECK·FK 같은 선언된 제약만 검사합니다.</p>
+  <h3>트랜잭션 상태</h3>
+  <p class="flow">활동 → 부분 완료(마지막 명령 실행) → 완료(COMMIT 로그가 디스크에)<br>활동/부분 완료 → 실패 → 철회(ROLLBACK, undo로 되돌림)</p>
+  <details class="quiz"><summary>확인 질문 1: "2 끝난 뒤" 장애에서 트랜잭션이 있으면 왜 A가 100,000으로 돌아오나? A가 든 페이지가 이미 디스크에 써졌어도?</summary>
+    <div>로그에 <code>&lt;T1, A, 100,000 → 90,000&gt;</code>은 있지만 <code>&lt;T1 COMMIT&gt;</code>이 없습니다. 재시작 때 복구 관리자는 "커밋 안 된 트랜잭션"이라고 판단하고, 로그의 <b>이전 값</b>(100,000)으로 되돌립니다(undo). 페이지가 이미 디스크에 써졌어도 로그가 있으니 되돌릴 수 있습니다.</div>
+  </details>
+  <details class="quiz"><summary>확인 질문 2: ACID 중 "COMMIT 응답 직후 전원이 나가도 데이터가 남는다"는 무엇이고, 무엇으로 지키나?</summary>
+    <div><b>Durability(지속성).</b> 커밋 응답 전에 로그를 디스크에 fsync하고, 재시작 때 그 로그를 다시 적용(redo)해서 지킵니다.</div>
+  </details>
+</section>
+
+<!-- S5 -->
+<section id="s5">
+  <div class="sec-head"><h2>S5. 동시성: 락, 격리 수준, 이상 현상</h2><span class="chip">★★★</span><span class="chip min">15분</span></div>
+  <p>트랜잭션을 하나씩 차례로 돌리면(직렬 실행) 안전하지만 느립니다. 그래서 동시에 돌리되 <b>"직렬로 돌린 것과 같은 결과"</b>를 내는 것이 목표입니다. 미니 Redis는 executor 하나로 진짜 직렬 실행을 했고, DBMS는 여러 스레드가 동시에 돌면서 이걸 흉내 냅니다.</p>
+
+  <h3>방법 1: 락</h3>
+  <div class="two">
+    <div class="tbl"><table>
+      <thead><tr><th>이미 걸린 락 →<br>새로 요청 ↓</th><th class="c">S (읽기)</th><th class="c">X (쓰기)</th></tr></thead>
+      <tbody>
+        <tr><td>S (읽기)</td><td class="c n">같이 가능</td><td class="c y">대기</td></tr>
+        <tr><td>X (쓰기)</td><td class="c y">대기</td><td class="c y">대기</td></tr>
+      </tbody>
+    </table></div>
+    <div>
+      <p>읽기끼리는 함께, 쓰기가 끼면 기다립니다. Pintos의 lock과 같고, 읽기를 함께 허용한다는 점만 다릅니다(reader-writer lock).</p>
+      <p style="margin-top:8px"><b>2단계 락킹(2PL):</b> 락을 얻기만 하는 단계 → 풀기만 하는 단계로 나누면 직렬 가능성이 보장됩니다. 보통 커밋 때 한꺼번에 풉니다.</p>
+    </div>
+  </div>
+  <p><b>교착 상태(deadlock).</b> T1이 A를 잡고 B를 기다리고, T2가 B를 잡고 A를 기다리면 영원히 멈춥니다. DBMS는 대기 그래프에서 사이클을 찾아 한쪽을 강제로 ROLLBACK합니다. 그래서 앱은 "트랜잭션 실패 → 재시도"를 준비해야 합니다.</p>
+
+  <h3>방법 2: MVCC (다중 버전)</h3>
+  <p>행을 고칠 때 옛 버전을 지우지 않고 남겨 둡니다. 읽는 쪽은 "내가 볼 수 있는 시점의 버전"을 읽으므로 <b>읽기가 쓰기를 기다리지 않고, 쓰기도 읽기를 기다리지 않습니다.</b> MySQL InnoDB와 PostgreSQL 모두 읽기에 MVCC를 씁니다. 쓰기끼리는 여전히 락으로 막습니다.</p>
+
+  <h3>격리 수준: 얼마나 엄격하게 막을까</h3>
+  <p>완전히 막을수록(직렬화) 대기·재시도가 늘어 느려집니다. 그래서 SQL 표준은 네 단계를 두고, 단계마다 허용하는 이상 현상이 다릅니다. 아래에서 직접 바꿔 보세요.</p>
+
+  <div class="panel">
+    <div class="panel-title">직접 해 보기 · 두 트랜잭션 타임라인</div>
+    <div class="row"><span class="why" style="width:4.5em">현상</span>
+      <span class="seg" role="group" aria-label="이상 현상">
+        <button type="button" data-scen="dirty" aria-pressed="true">Dirty Read</button>
+        <button type="button" data-scen="nonrep" aria-pressed="false">Non-repeatable Read</button>
+        <button type="button" data-scen="phantom" aria-pressed="false">Phantom Read</button>
+      </span>
+    </div>
+    <div class="row"><span class="why" style="width:4.5em">격리 수준</span>
+      <span class="seg" role="group" aria-label="격리 수준">
+        <button type="button" data-lv="0" aria-pressed="true">READ UNCOMMITTED</button>
+        <button type="button" data-lv="1" aria-pressed="false">READ COMMITTED</button>
+        <button type="button" data-lv="2" aria-pressed="false">REPEATABLE READ</button>
+        <button type="button" data-lv="3" aria-pressed="false">SERIALIZABLE</button>
+      </span>
+    </div>
+    <p id="iso-desc"></p>
+    <div class="tbl"><table class="tl">
+      <thead><tr><th>시간</th><th>T1 (나)</th><th>T2 (다른 사람)</th></tr></thead>
+      <tbody id="iso-body"></tbody>
+    </table></div>
+    <div class="verdict" id="iso-verdict" aria-live="polite"></div>
+  </div>
+
+  <div class="tbl">
+  <table>
+    <thead><tr><th>격리 수준 (SQL 표준)</th><th class="c">Dirty Read</th><th class="c">Non-repeatable</th><th class="c">Phantom</th></tr></thead>
+    <tbody>
+      <tr><td>READ UNCOMMITTED</td><td class="c y">발생</td><td class="c y">발생</td><td class="c y">발생</td></tr>
+      <tr><td>READ COMMITTED</td><td class="c n">막힘</td><td class="c y">발생</td><td class="c y">발생</td></tr>
+      <tr><td>REPEATABLE READ</td><td class="c n">막힘</td><td class="c n">막힘</td><td class="c y">발생</td></tr>
+      <tr><td>SERIALIZABLE</td><td class="c n">막힘</td><td class="c n">막힘</td><td class="c n">막힘</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note"><b>실제 DBMS는 표준과 조금 다릅니다.</b> 기본 격리 수준은 MySQL InnoDB가 REPEATABLE READ, PostgreSQL이 READ COMMITTED입니다. InnoDB의 REPEATABLE READ는 일반 SELECT가 스냅샷을 읽어서 팬텀이 대부분 보이지 않습니다. PostgreSQL은 READ UNCOMMITTED를 받아도 READ COMMITTED처럼 동작해서 dirty read가 없습니다. 위 표는 시험용 표준 기준입니다.</div>
+  <p><b>Lost update</b>도 알아 두세요. T1과 T2가 둘 다 잔액 100,000을 읽고 각자 10,000을 빼서 90,000을 쓰면, 두 번 출금했는데 잔액은 90,000입니다. 쓰기 락(X)이나 <code>SELECT … FOR UPDATE</code>로 막습니다. S0의 6단계가 이 일을 합니다.</p>
+  <details class="quiz"><summary>확인 질문 1: READ COMMITTED에서 같은 SELECT를 두 번 했는데 값이 다르게 나왔다. 무슨 현상이고, 어떤 수준으로 올려야 막히나?</summary>
+    <div><b>Non-repeatable Read.</b> 사이에 다른 트랜잭션이 그 행을 고치고 커밋했기 때문입니다. REPEATABLE READ 이상이면 막힙니다(트랜잭션 시작 시점 스냅샷을 계속 읽거나, 읽은 행에 락을 유지).</div>
+  </details>
+  <details class="quiz"><summary>확인 질문 2: Non-repeatable Read와 Phantom Read의 차이는?</summary>
+    <div>Non-repeatable은 <b>이미 읽은 행의 값</b>이 바뀐 것(UPDATE), Phantom은 <b>조건에 맞는 행의 개수</b>가 바뀐 것(INSERT/DELETE)입니다. 행 하나에 락을 거는 것만으로는 아직 없는 새 행을 막을 수 없어서 팬텀이 더 막기 어렵습니다.</div>
+  </details>
+</section>
+
+<!-- S6 -->
+<section id="s6">
+  <div class="sec-head"><h2>S6. 장애 복구: WAL, redo/undo, 체크포인트</h2><span class="chip">★★</span><span class="chip min">10분</span></div>
+  <p><b>WAL(Write-Ahead Logging) 규칙</b>은 두 줄입니다.</p>
+  <ol>
+    <li>데이터 페이지를 디스크에 쓰기 <b>전에</b>, 그 변경의 로그가 먼저 디스크에 있어야 한다.</li>
+    <li>COMMIT 응답 <b>전에</b>, 그 트랜잭션의 로그가 전부 디스크에 있어야 한다.</li>
+  </ol>
+  <p class="why"><b>왜 로그를 먼저 쓰면 빠른가?</b> 데이터 페이지는 디스크 여기저기 흩어져 있어서(랜덤 쓰기) 느리고, 로그는 파일 끝에 이어 붙이기만 해서(순차 쓰기) 빠릅니다. 그래서 커밋 때는 로그만 확실히 쓰고, 페이지는 나중에 모아서 씁니다.</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>재시작 때 본 상황</th><th>하는 일</th><th>필요한 로그 내용</th></tr></thead>
+    <tbody>
+      <tr><td>로그에 COMMIT이 있는데, 데이터 페이지엔 반영 안 됨</td><td><b>redo</b>: 로그대로 다시 적용</td><td>새 값</td></tr>
+      <tr><td>로그에 COMMIT이 없는데, 데이터 페이지엔 이미 써짐</td><td><b>undo</b>: 이전 값으로 되돌림</td><td>이전 값</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><b>체크포인트.</b> "여기까지의 dirty 페이지는 디스크에 다 썼다"는 표시입니다. 재시작 때 로그를 처음부터가 아니라 마지막 체크포인트부터 읽으면 됩니다. <b>안 하면?</b> 로그가 몇 달 치 쌓였을 때 복구에 몇 시간이 걸립니다.</p>
+  <h3>미니 Redis에서 이미 만든 것</h3>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>미니 Redis</th><th>DBMS</th><th>공통 핵심</th></tr></thead>
+    <tbody>
+      <tr><td>AOF, 응답 전에 write</td><td>WAL</td><td>데이터보다 로그를 먼저</td></tr>
+      <tr><td>배치 write 1번</td><td>group commit</td><td>여러 커밋을 시스템 콜 한 번으로</td></tr>
+      <tr><td>재시작 시 AOF 재실행</td><td>redo 복구</td><td>로그를 다시 적용해 상태를 만든다</td></tr>
+      <tr><td>AOF 압축 (base + incr)</td><td>체크포인트</td><td>로그가 끝없이 커지지 않게</td></tr>
+      <tr><td>멱등 레코드</td><td>멱등 redo</td><td>두 번 적용해도 결과가 같아야</td></tr>
+      <tr><td>(없음)</td><td>undo</td><td>미니 Redis는 성공한 명령만 기록해서 되돌릴 일이 없었다</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <details class="quiz"><summary>확인 질문: 커밋 안 된 트랜잭션의 dirty 페이지를 디스크에 미리 써도 될까? 된다면 어떤 로그가 꼭 필요한가?</summary>
+    <div>됩니다(버퍼 풀 자리가 모자랄 때 실제로 그렇게 합니다). 대신 나중에 그 트랜잭션이 실패하면 되돌려야 하므로 <b>undo 정보(이전 값)</b>가 그 페이지보다 먼저 디스크에 있어야 합니다. WAL 규칙 1번이 바로 이것입니다.</div>
+  </details>
+</section>
+
+<!-- S7 -->
+<section id="s7">
+  <div class="sec-head"><h2>S7. 정규화·ER (훑기)</h2><span class="chip">★</span><span class="chip min">5분</span></div>
+  <p><b>정규화</b>는 중복을 없애려고 테이블을 쪼개는 일입니다. 중복이 있으면 고칠 때 한 곳만 바뀌어 데이터가 어긋납니다(이상 현상: 삽입·수정·삭제 이상).</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>정규형</th><th>조건 (한 줄)</th><th>어기는 예</th></tr></thead>
+    <tbody>
+      <tr><td>1NF</td><td>칸 하나에 값 하나 (원자값)</td><td>phone 칸에 "010-1, 010-2"</td></tr>
+      <tr><td>2NF</td><td>1NF + 기본키 <i>일부</i>에만 의존하는 열이 없음</td><td>(학번, 과목) PK인데 학생 이름이 학번에만 의존</td></tr>
+      <tr><td>3NF</td><td>2NF + 키가 아닌 열을 거쳐 의존하는 열이 없음 (이행 의존)</td><td>학번 → 학과 → 학과장</td></tr>
+      <tr><td>BCNF</td><td>모든 결정자가 후보키</td><td>3NF지만 키가 아닌 열이 키 일부를 결정</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="why"><b>반정규화.</b> 너무 쪼개면 조회 때 조인이 많아져 느립니다. 그래서 읽기가 압도적으로 많은 곳은 일부러 중복을 허용하기도 합니다(캐시를 두는 것과 같은 거래).</p>
+  <p><b>ER 모델</b>은 테이블을 만들기 전 설계 그림입니다. 개체(사각형: 학생, 과목), 속성(타원: 이름), 관계(마름모: 수강)와 관계의 수(1:1, 1:N, M:N)를 그립니다. <b>M:N은 테이블로 바로 못 만들어서</b> 중간 테이블(수강: 학번 FK, 과목코드 FK)을 둡니다.</p>
+  <details class="quiz"><summary>확인 질문: 학생과 과목은 M:N이다. 테이블로 옮기면 테이블이 몇 개 필요한가?</summary>
+    <div><b>3개</b>입니다. 학생, 과목, 그리고 둘을 잇는 수강(학번, 과목코드를 FK로, 둘을 합쳐 PK로).</div>
+  </details>
+</section>
+
+<!-- Q&A -->
+<section id="qa">
+  <div class="sec-head"><h2>예상 질문</h2><span class="chip min">5분</span></div>
+  <div class="qa">
+    <details class="quiz"><summary>DB와 DBMS는 어떻게 다른가요?</summary><div>DB는 데이터 모음, DBMS는 그걸 관리하는 소프트웨어입니다. DBMS가 동시성 제어, 장애 복구, 질의 처리, 권한을 맡아서 앱이 파일을 직접 다룰 때 생기는 문제를 없앱니다.</div></details>
+    <details class="quiz"><summary>인덱스를 모든 열에 걸면 안 되는 이유는?</summary><div>쓰기마다 모든 인덱스를 같이 고쳐야 해서 INSERT/UPDATE가 느려지고, 공간도 듭니다. 자주 조회 조건(WHERE, JOIN, ORDER BY)에 쓰이고 값이 다양한 열에 겁니다.</div></details>
+    <details class="quiz"><summary>B+트리가 이진 탐색 트리보다 DB에 맞는 이유는?</summary><div>노드 하나가 페이지 하나라서 자식이 수백 개입니다. 트리가 낮아(높이 3~4) 디스크 읽기가 몇 번이면 끝납니다. 이진 트리는 높이가 log₂n이라 1억 행이면 27번 가까이 디스크를 읽습니다. 또 리프가 이어져 있어 범위 검색이 쉽습니다.</div></details>
+    <details class="quiz"><summary>ACID를 각각 무엇이 보장하나요?</summary><div>A: undo 로그. C: 제약 조건과 앱 로직. I: 락·MVCC. D: 커밋 전 로그 fsync와 redo.</div></details>
+    <details class="quiz"><summary>격리 수준을 항상 SERIALIZABLE로 하면 안 되나요?</summary><div>안전하지만 대기·교착 상태·재시도가 늘어 처리량이 떨어집니다. 그래서 기본값은 보통 READ COMMITTED나 REPEATABLE READ이고, 꼭 필요한 트랜잭션만 높입니다.</div></details>
+    <details class="quiz"><summary>MVCC가 뭐고 왜 쓰나요?</summary><div>행의 여러 버전을 남겨 두고, 읽는 트랜잭션은 자기 시점의 버전을 읽게 하는 방식입니다. 읽기와 쓰기가 서로 기다리지 않아 동시성이 높아집니다.</div></details>
+    <details class="quiz"><summary>커밋했는데 데이터 파일엔 아직 안 써졌습니다. 이때 장애가 나면?</summary><div>로그에 COMMIT이 있으므로 재시작 때 redo로 다시 적용합니다. 그래서 커밋된 내용은 사라지지 않습니다.</div></details>
+    <details class="quiz"><summary>WAL이 데이터를 바로 쓰는 것보다 빠른 이유는?</summary><div>로그는 파일 끝에 순차로 이어 쓰고 크기가 작습니다. 데이터 페이지는 흩어져 있어 랜덤 쓰기입니다. 커밋 때는 로그만 쓰고 페이지는 나중에 모아 쓰므로 빠릅니다.</div></details>
+    <details class="quiz"><summary>정규화를 왜 하고, 반정규화는 언제 하나요?</summary><div>중복을 없애 삽입·수정·삭제 이상을 막으려고 합니다. 조인이 너무 많아 읽기가 느려지는 곳에서는 일부러 중복을 두는 반정규화를 합니다.</div></details>
+  </div>
+</section>
+
+<footer class="src">
+  출처:
+  <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html">MySQL 8.4 매뉴얼 · InnoDB 격리 수준 (기본값 REPEATABLE READ)</a> ·
+  <a href="https://www.postgresql.org/docs/current/transaction-iso.html">PostgreSQL 문서 · Transaction Isolation (기본값 Read Committed)</a> ·
+  <a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-file-space.html">MySQL 8.0 매뉴얼 · InnoDB 페이지 크기 (기본 16KB)</a>
+</footer>
+</main>
+
+<script>
+(() => {
+/* ---------- S0: 단계별 지도 ---------- */
+const steps = [
+  { on:['client'], t:'SQL 문장 보내기', f:'클라이언트(앱) → DBMS 서버 : SQL 문자열',
+    b:'앱은 데이터 파일을 직접 열지 않습니다. "7번 계좌에서 1만 원 빼"라는 문장만 보냅니다. 어디에 어떻게 저장돼 있는지는 DBMS만 압니다.',
+    w:'<b>안 하면?</b> 앱마다 저장 형식·동시 접근·장애 처리를 다 따로 짜야 합니다(S1).' },
+  { on:['parser'], t:'문법과 이름 확인', f:'파서 : 문자열 → 파스 트리',
+    b:'문법이 맞는지, accounts 테이블과 balance 열이 정말 있는지(카탈로그 조회) 확인하고 트리 구조로 바꿉니다.',
+    w:'<b>왜 여기서?</b> 데이터에 손대기 전에 틀린 문장을 걸러 냅니다. 오타 에러는 이 단계에서 납니다.' },
+  { on:['optimizer'], t:'어떻게 찾을지 고르기', f:'옵티마이저 : 파스 트리 → 실행 계획',
+    b:'"id = 7"을 찾는 방법은 여러 개입니다. 테이블을 처음부터 끝까지 읽거나, id 인덱스(B+트리)를 탑니다. 비용을 추정해서 싼 쪽을 고릅니다.',
+    w:'<b>왜 필요?</b> SQL은 "무엇을"만 말하고 "어떻게"는 말하지 않습니다. 그 "어떻게"를 정하는 곳입니다(S2, S3).' },
+  { on:['executor','buffer'], t:'페이지 요청', f:'실행기 → 버퍼 풀 : id=7 행이 든 페이지 줘',
+    b:'실행기는 디스크를 직접 읽지 않습니다. 필요한 페이지를 버퍼 풀에 달라고 합니다.',
+    w:'<b>CS:APP와 연결:</b> 캐시와 같은 생각입니다. 메모리에 있으면(hit) 디스크까지 가지 않습니다.' },
+  { on:['buffer','data'], t:'없으면 디스크에서 읽기', f:'버퍼 풀 → 데이터 파일 : 페이지 하나를 통째로 읽기 (InnoDB 기본 16KB)',
+    b:'메모리에 없으면(miss) 행 하나가 아니라 페이지 단위로 읽어 옵니다. 자리가 없으면 오래 안 쓴 페이지를 내보냅니다(LRU 계열).',
+    w:'<b>왜 통째로?</b> 디스크는 한 번 가는 비용이 크고, 가서 조금 더 읽는 비용은 작습니다. 그래서 한 번에 크게 읽습니다.' },
+  { on:['executor','lock'], t:'행에 쓰기 락 걸기', f:'실행기 → 락 매니저 : id=7 행에 X(쓰기) 락 줘',
+    b:'다른 트랜잭션이 같은 행을 동시에 고치지 못하게 막습니다. 이미 누가 잡고 있으면 기다립니다.',
+    w:'<b>안 하면?</b> 두 사람이 동시에 출금할 때 한쪽 결과가 사라집니다(lost update, S5). Pintos의 lock_acquire와 같은 역할입니다.' },
+  { on:['executor','log'], t:'바꾸기 전에 로그부터', f:'실행기 → 로그 매니저 : "7번 계좌 100,000 → 90,000" 기록',
+    b:'데이터를 고치기 전에 무엇을 바꾸는지 로그에 먼저 적습니다. 이전 값(undo용)과 새 값(redo용)을 같이 적습니다.',
+    w:'<b>이 규칙이 WAL입니다(S6).</b> 로그가 먼저 있어야 장애 뒤에 되돌리거나 다시 할 수 있습니다.' },
+  { on:['executor','buffer'], t:'메모리의 페이지만 수정', f:'실행기 → 버퍼 풀 : 페이지 수정, dirty 표시',
+    b:'메모리에 있는 페이지만 바꿉니다. 디스크의 데이터 파일은 아직 옛날 값입니다. 이런 페이지를 dirty 페이지라고 부릅니다.',
+    w:'<b>왜 바로 안 쓰나?</b> 수정할 때마다 16KB 페이지를 디스크 여기저기에 쓰면 너무 느립니다.' },
+  { on:['log','logfile','client'], t:'COMMIT: 로그를 디스크에, 그다음 응답', f:'로그 매니저 → 로그 파일 : fsync   그다음   DBMS → 클라이언트 : OK',
+    b:'COMMIT이 오면 로그를 디스크에 확실히 쓴(fsync) 뒤에야 "성공"이라고 답합니다. 이때 걸어 둔 락도 풉니다.',
+    w:'<b>Durability(S4):</b> 응답 뒤에 전원이 나가도 로그가 디스크에 있으니 다시 만들 수 있습니다. 미니 Redis에서 응답 전에 AOF를 쓴 것과 같은 이유입니다.' },
+  { on:['buffer','data'], t:'나중에: 페이지를 디스크로', f:'버퍼 풀 → 데이터 파일 : dirty 페이지를 몰아서 쓰기',
+    b:'응답과 상관없이 백그라운드에서 dirty 페이지를 데이터 파일에 씁니다. 어디까지 썼는지 표시해 두는 것이 체크포인트입니다.',
+    w:'<b>안 하면?</b> 재시작 때 로그를 처음부터 전부 다시 읽어야 합니다(S6).' },
+];
+const ids = ['client','parser','optimizer','executor','buffer','lock','log','data','logfile'];
+let si = 0;
+const $ = id => document.getElementById(id);
+function renderStep() {
+  const s = steps[si];
+  ids.forEach(n => $('n-' + n).classList.toggle('on', s.on.includes(n)));
+  $('st-no').textContent = `${si + 1} / ${steps.length}`;
+  $('st-title').textContent = s.t;
+  $('st-flow').textContent = s.f;
+  $('st-body').textContent = s.b;
+  $('st-why').innerHTML = s.w;
+  $('st-prev').disabled = si === 0;
+  $('st-next').disabled = si === steps.length - 1;
+}
+$('st-prev').onclick = () => { if (si > 0) { si--; renderStep(); } };
+$('st-next').onclick = () => { if (si < steps.length - 1) { si++; renderStep(); } };
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, select, textarea')) return;
+  const r = $('s0').getBoundingClientRect();
+  if (r.bottom < 0 || r.top > innerHeight) return; // S0이 보일 때만
+  if (e.key === 'ArrowRight') $('st-next').click();
+  if (e.key === 'ArrowLeft') $('st-prev').click();
+});
+renderStep();
+
+/* ---------- S3: B+트리 ---------- */
+const T = {
+  root: { keys:[40], x:315, y:14, w:90, kids:['L','R'] },
+  L: { keys:[15,28], x:125, y:104, w:110, kids:['l0','l1','l2'] },
+  R: { keys:[55,70], x:485, y:104, w:110, kids:['l3','l4','l5'] },
+  l0:{ keys:[3,8,12], x:10, y:200, w:100, leaf:true },
+  l1:{ keys:[15,20,25], x:130, y:200, w:100, leaf:true },
+  l2:{ keys:[28,33,37], x:250, y:200, w:100, leaf:true },
+  l3:{ keys:[40,46,51], x:370, y:200, w:100, leaf:true },
+  l4:{ keys:[55,61,66], x:490, y:200, w:100, leaf:true },
+  l5:{ keys:[70,77,85], x:610, y:200, w:100, leaf:true },
+};
+const leaves = ['l0','l1','l2','l3','l4','l5'];
+const H = 36, NS = 'http://www.w3.org/2000/svg';
+const svg = $('bt');
+const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+for (const p in T) (T[p].kids || []).forEach((c, i) => {
+  const P = T[p], C = T[c], n = P.kids.length;
+  svg.appendChild(el('line', { class:'bt-edge', id:`e-${c}`, x1: P.x + P.w * (i + 0.5) / n, y1: P.y + H, x2: C.x + C.w / 2, y2: C.y }));
+});
+leaves.slice(0, -1).forEach((a, i) => {
+  const A = T[a], B = T[leaves[i + 1]];
+  svg.appendChild(el('line', { class:'bt-link', x1: A.x + A.w, y1: A.y + H / 2, x2: B.x, y2: B.y + H / 2 }));
+});
+for (const id in T) {
+  const n = T[id], g = el('g', { class:'bt-node', id:`b-${id}` });
+  g.appendChild(el('rect', { x:n.x, y:n.y, width:n.w, height:H, rx:6 }));
+  g.appendChild(el('text', { x:n.x + n.w / 2, y:n.y + 23, 'text-anchor':'middle' }, n.keys.join(' · ')));
+  svg.appendChild(g);
+}
+svg.appendChild(el('text', { class:'bt-cap', x:8, y:30 }, '루트 (페이지 1개)'));
+svg.appendChild(el('text', { class:'bt-cap', x:8, y:120 }, '안쪽 노드'));
+svg.appendChild(el('text', { class:'bt-cap', x:10, y:254 }, '리프 = 실제 키 (점선: 옆 리프로 연결)'));
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+let run = 0;
+function clearTree() {
+  svg.querySelectorAll('.bt-node, .bt-edge').forEach(e => e.classList.remove('on', 'hit', 'miss'));
+}
+function descend(key) {
+  const path = ['root'], why = [];
+  let n = 'root';
+  while (!T[n].leaf) {
+    const k = T[n].keys, i = k.filter(x => key >= x).length;
+    why.push(i === 0 ? `${key} < ${k[0]} → 맨 왼쪽 자식으로`
+      : i === k.length ? `${key} ≥ ${k[k.length - 1]} → 맨 오른쪽 자식으로`
+      : `${k[i - 1]} ≤ ${key} < ${k[i]} → ${i + 1}번째 자식으로`);
+    n = T[n].kids[i];
+    path.push(n);
+  }
+  return { path, why };
+}
+const readNum = (id) => {
+  const v = Math.round(Number($(id).value));
+  return Number.isFinite(v) && v >= 1 && v <= 99 ? v : null;
+};
+async function walk(path, why, myRun, log) {
+  for (let i = 0; i < path.length; i++) {
+    if (myRun !== run) return false;
+    if (i > 0) $(`e-${path[i]}`).classList.add('on');
+    $(`b-${path[i]}`).classList.add('on');
+    if (i < why.length) log(`${i + 1}. ${i === 0 ? '루트' : '안쪽 노드'} [${T[path[i]].keys.join(', ')}] 읽음: ${why[i]}`);
+    await sleep(550);
+  }
+  return true;
+}
+$('bt-find').onclick = async () => {
+  const key = readNum('bt-key');
+  const ul = $('bt-log');
+  if (key == null) { ul.innerHTML = '<li>1~99 사이 정수를 넣어 주세요.</li>'; return; }
+  const myRun = ++run; clearTree(); ul.innerHTML = ''; $('bt-stat').textContent = '';
+  const log = s => { const li = document.createElement('li'); li.textContent = s; ul.appendChild(li); };
+  const { path, why } = descend(key);
+  if (!(await walk(path, why, myRun, log))) return;
+  const leaf = path[path.length - 1], found = T[leaf].keys.includes(key);
+  $(`b-${leaf}`).classList.remove('on');
+  $(`b-${leaf}`).classList.add(found ? 'hit' : 'miss');
+  log(`${path.length}. 리프 [${T[leaf].keys.join(', ')}] 읽음: ${found ? `${key} 찾음 → 이 행의 위치를 얻는다` : `${key} 없음 → 그런 행은 없다고 바로 답한다`}`);
+  $('bt-stat').innerHTML = `읽은 페이지 <b>${path.length}개</b> · 인덱스 없이 전체 스캔이면 리프 <b>${leaves.length}개</b>를 모두 읽어야 합니다 (행이 늘수록 차이가 커집니다)`;
+};
+$('bt-range').onclick = async () => {
+  const lo = readNum('bt-lo'), hi = readNum('bt-hi');
+  const ul = $('bt-log');
+  if (lo == null || hi == null || lo > hi) { ul.innerHTML = '<li>1~99 사이 정수로, 앞 값이 뒤 값보다 작거나 같게 넣어 주세요.</li>'; return; }
+  const myRun = ++run; clearTree(); ul.innerHTML = ''; $('bt-stat').textContent = '';
+  const log = s => { const li = document.createElement('li'); li.textContent = s; ul.appendChild(li); };
+  const { path, why } = descend(lo);
+  if (!(await walk(path, why, myRun, log))) return;
+  let li = leaves.indexOf(path[path.length - 1]), reads = path.length - 1, got = [];
+  $(`b-${leaves[li]}`).classList.remove('on');
+  while (li < leaves.length && T[leaves[li]].keys[0] <= hi) {
+    if (myRun !== run) return;
+    const id = leaves[li], hits = T[id].keys.filter(k => k >= lo && k <= hi);
+    reads++; got = got.concat(hits);
+    $(`b-${id}`).classList.add(hits.length ? 'hit' : 'on');
+    log(`${reads}. 리프 [${T[id].keys.join(', ')}] 읽음: ${hits.length ? hits.join(', ') + ' 포함' : '범위 안 값 없음'}${li + 1 < leaves.length && T[leaves[li + 1]].keys[0] <= hi ? ' → 옆 리프로' : ' → 다음 리프 첫 키가 ' + hi + '보다 크거나 끝 → 멈춤'}`);
+    li++;
+    await sleep(550);
+  }
+  $('bt-stat').innerHTML = `결과 <b>${got.length ? got.join(', ') : '없음'}</b> · 읽은 페이지 <b>${reads}개</b>. 루트부터 다시 내려가지 않고 리프를 옆으로 따라갔습니다.`;
+};
+
+/* ---------- S4: 장애 시뮬레이터 ---------- */
+const txSteps = ['BEGIN', 'A에서 10,000 빼기', 'B에 10,000 더하기', 'COMMIT'];
+const logLines = ['<T1 BEGIN>', '<T1, A, 100,000 → 90,000>', '<T1, B, 100,000 → 110,000>', '<T1 COMMIT>'];
+let mode = 'tx', crash = 2;
+const won = n => n.toLocaleString('ko-KR');
+function renderCrash() {
+  const ul = $('cr-steps'); ul.innerHTML = '';
+  txSteps.forEach((s, i) => {
+    if (mode === 'raw' && i === 0) return;
+    if (mode === 'raw' && i === 3) return;
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="k">${i + 1}</span><span></span>`;
+    li.lastChild.textContent = mode === 'raw' ? s.replace('빼기', '빼서 파일에 바로 쓰기').replace('더하기', '더해서 파일에 바로 쓰기') : s;
+    li.className = i < crash ? 'done' : 'lost';
+    ul.appendChild(li);
+    if (i === crash - 1) { const c = document.createElement('li'); c.className = 'crash-line'; c.textContent = '⚡ 여기서 전원 꺼짐'; ul.appendChild(c); }
+  });
+  // raw 모드에서 4번 장애 = 끝까지 다 쓴 상태
+  if (mode === 'raw' && crash === 4 && !ul.querySelector('.crash-line')) { const c = document.createElement('li'); c.className = 'crash-line'; c.textContent = '⚡ 여기서 전원 꺼짐'; ul.appendChild(c); }
+  const lg = $('cr-log'); lg.innerHTML = '';
+  let a, b, action;
+  if (mode === 'raw') {
+    lg.innerHTML = '<li>(로그 없음)</li>';
+    a = crash >= 2 ? 90000 : 100000; b = crash >= 3 ? 110000 : 100000;
+    action = '재시작해도 되돌리거나 이어서 할 근거가 없습니다. 디스크에 쓰인 그대로 남습니다.';
+  } else {
+    logLines.slice(0, crash).forEach(s => { const li = document.createElement('li'); li.textContent = s; lg.appendChild(li); });
+    const committed = crash === 4;
+    a = committed ? 90000 : 100000; b = committed ? 110000 : 100000;
+    action = committed
+      ? '<b>COMMIT 기록이 있다 → redo.</b> 데이터 파일에 아직 안 써진 변경도 로그의 새 값으로 다시 적용합니다.'
+      : '<b>COMMIT 기록이 없다 → undo.</b> (최악의 경우 A의 페이지가 이미 디스크에 나갔더라도) 로그의 이전 값으로 되돌립니다.';
+  }
+  $('cr-action').innerHTML = action;
+  $('cr-a').textContent = won(a); $('cr-b').textContent = won(b); $('cr-sum').textContent = won(a + b);
+  const v = $('cr-verdict'), ok = a + b === 200000;
+  v.className = 'verdict ' + (ok ? 'good' : 'bad');
+  v.textContent = ok
+    ? (a === 100000 ? '합계 200,000 유지: 이체가 통째로 없던 일이 됐습니다 (원자성). 앱은 "실패"를 받았으니 다시 시도하면 됩니다.'
+                    : '합계 200,000 유지: 이체가 끝까지 반영됐습니다' + (mode === 'tx' ? ' (커밋된 것은 남는다: 지속성).' : '. 이번엔 운이 좋았을 뿐입니다.'))
+    : '합계 190,000: 1만 원이 사라졌습니다. A에서는 빠졌는데 B에는 들어가지 않은 중간 상태가 그대로 남았습니다.';
+}
+document.querySelectorAll('[data-mode]').forEach(btn => btn.onclick = () => {
+  mode = btn.dataset.mode;
+  document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === btn));
+  renderCrash();
+});
+document.querySelectorAll('[data-crash]').forEach(btn => btn.onclick = () => {
+  crash = Number(btn.dataset.crash);
+  document.querySelectorAll('[data-crash]').forEach(x => x.setAttribute('aria-pressed', x === btn));
+  renderCrash();
+});
+renderCrash();
+
+/* ---------- S5: 격리 수준 ---------- */
+const SC = {
+  dirty: { blockAt: 1,
+    desc: '<b>Dirty Read:</b> 다른 트랜잭션이 아직 커밋하지 않은 값을 읽는 것. 그 값은 곧 ROLLBACK돼서 세상에 없던 값이 됩니다.',
+    rows: [['BEGIN', 'BEGIN'], ['', 'UPDATE A = 50,000 (아직 커밋 안 함)'], ['SELECT A → {r}', ''], ['', 'ROLLBACK']],
+    r: bad => bad ? '50,000' : '100,000',
+    badMsg: 'T1이 50,000을 읽었는데 T2가 ROLLBACK했습니다. T1은 한 번도 존재하지 않은 값으로 계산을 이어 갑니다.',
+    okMsg: '커밋된 값만 읽으므로 100,000을 읽습니다 (MVCC면 커밋된 옛 버전을, 락 방식이면 T2가 끝날 때까지 기다린 뒤 읽음).' },
+  nonrep: { blockAt: 2,
+    desc: '<b>Non-repeatable Read:</b> 한 트랜잭션 안에서 같은 행을 두 번 읽었는데 값이 다른 것. 사이에 누가 UPDATE하고 커밋했기 때문입니다.',
+    rows: [['BEGIN', ''], ['SELECT A → 100,000', ''], ['', 'BEGIN; UPDATE A = 50,000; COMMIT'], ['SELECT A → {r}', '']],
+    r: bad => bad ? '50,000' : '100,000',
+    badMsg: '같은 SELECT인데 100,000 → 50,000으로 바뀌었습니다. 첫 값을 믿고 계산한 T1의 판단이 어긋납니다.',
+    okMsg: 'T1은 트랜잭션 시작 시점의 스냅샷을 계속 읽어서(또는 읽은 행에 락을 유지해서) 100,000을 다시 읽습니다.' },
+  phantom: { blockAt: 3,
+    desc: '<b>Phantom Read:</b> 같은 조건으로 두 번 조회했는데 행의 개수가 다른 것. 사이에 누가 조건에 맞는 새 행을 INSERT했기 때문입니다.',
+    rows: [['BEGIN', ''], ['SELECT COUNT(*) WHERE 잔액 ≥ 50,000 → 3', ''], ['', 'BEGIN; INSERT 새 계좌(잔액 70,000); COMMIT'], ['SELECT COUNT(*) … → {r}', '']],
+    r: bad => bad ? '4' : '3',
+    badMsg: '없던 행(유령, phantom)이 나타나 3 → 4가 됐습니다. 행 단위 락으로는 "아직 없는 행"을 막을 수 없어서 REPEATABLE READ에서도 (표준상) 생길 수 있습니다.',
+    okMsg: '조건 범위 전체를 잠그거나(범위 락) 직렬 실행과 같은 결과만 허용하므로 3이 유지됩니다.' },
+};
+const LV = ['READ UNCOMMITTED', 'READ COMMITTED', 'REPEATABLE READ', 'SERIALIZABLE'];
+let scen = 'dirty', lv = 0;
+function renderIso() {
+  const s = SC[scen], bad = lv < s.blockAt;
+  $('iso-desc').innerHTML = s.desc;
+  const tb = $('iso-body'); tb.innerHTML = '';
+  s.rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.appendChild(el2('td', `t${i + 1}`));
+    r.forEach(c => {
+      const td = document.createElement('td');
+      if (c.includes('{r}')) {
+        const [pre, post] = c.split('{r}');
+        td.append(pre);
+        const sp = document.createElement('span'); sp.className = 'r ' + (bad ? 'bad' : 'good'); sp.textContent = s.r(bad);
+        td.append(sp, post);
+      } else td.textContent = c;
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  const v = $('iso-verdict');
+  v.className = 'verdict ' + (bad ? 'bad' : 'good');
+  v.textContent = `${LV[lv]}: ${bad ? '발생. ' + s.badMsg : '막힘. ' + s.okMsg}`;
+}
+function el2(tag, text) { const e = document.createElement(tag); e.textContent = text; return e; }
+document.querySelectorAll('[data-scen]').forEach(btn => btn.onclick = () => {
+  scen = btn.dataset.scen;
+  document.querySelectorAll('[data-scen]').forEach(x => x.setAttribute('aria-pressed', x === btn));
+  renderIso();
+});
+document.querySelectorAll('[data-lv]').forEach(btn => btn.onclick = () => {
+  lv = Number(btn.dataset.lv);
+  document.querySelectorAll('[data-lv]').forEach(x => x.setAttribute('aria-pressed', x === btn));
+  renderIso();
+});
+renderIso();
+})();
+</script>

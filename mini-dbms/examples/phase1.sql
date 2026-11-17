@@ -1,4 +1,4 @@
-INSERT INTO users (name, email) VALUES ('소희', 'sohee@example.com');
-INSERT INTO users (name, email) VALUES ('O''Brien', 'obrien@example.com');
-SELECT * FROM users;
-SELECT id, name FROM users WHERE email = 'sohee@example.com';
+CREATE TABLE users (name VARCHAR(30) NOT NULL, age INT);
+INSERT INTO users VALUES ('sohee', 25), ('jiho', 30), ('guest', NULL);
+SELECT * FROM users ORDER BY id;
+SELECT * FROM users ORDER BY id;
