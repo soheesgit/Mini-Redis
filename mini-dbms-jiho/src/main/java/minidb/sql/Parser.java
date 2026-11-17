@@ -4,8 +4,6 @@ import static minidb.sql.TokenType.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import minidb.sql.Ast.*;
 
 /**
@@ -16,18 +14,16 @@ import minidb.sql.Ast.*;
  * 문장   := (create | insert | select | update | delete) ';'
  * or     := and (OR and)*
  * and    := not (AND not)*
- * not    := NOT not | 조건
+ * not    := NOT not | '(' or ')' | 조건
  * 조건   := 피연산자 [ 비교연산자 피연산자 | IS [NOT] NULL
  *                    | [NOT] BETWEEN 피연산자 AND 피연산자 | [NOT] IN (피연산자, ...) | [NOT] LIKE 문자열 ]
- * 피연산자 := 값 | 칸 이름 | '(' or ')'
+ * 피연산자 := 값 | 칸 이름
  * </pre>
+ * 괄호는 조건 자리에만 온다: `(a = 1) = TRUE`, `a IN ((b OR c))`는 에러.
  * 비교가 NOT보다 먼저 묶인다 (MySQL과 같음): `NOT a = 1` → NOT(a = 1).
  * BETWEEN의 양 끝은 피연산자라서 `a BETWEEN 1 AND 5 AND b = 2`의 두 번째 AND는 논리 AND가 된다.
  */
 public final class Parser {
-
-    private static final Set<String> NO_ARG_TYPES =
-            Set.of("int", "bigint", "double", "boolean", "date", "datetime", "timestamp");
 
     private final List<Token> ts;
     private int i = 0;
@@ -44,14 +40,6 @@ public final class Parser {
             out.add(p.statement());
         }
         return out;
-    }
-
-    /**
-     * 식별자 비교용 키. 대소문자 무관(설계 1.1)이고 테이블 파일 이름에도 쓴다.
-     * toLowerCase는 'ı'(U+0131)·'ſ'(U+017F)를 i·s로 바꾸지 않아 equalsIgnoreCase·toUpperCase보다 안전하다
-     */
-    public static String key(String ident) {
-        return ident.toLowerCase(Locale.ROOT);
     }
 
     // ───── 문장 ─────
@@ -73,7 +61,7 @@ public final class Parser {
     private CreateTable createTable() {
         next();
         keyword("TABLE");
-        String table = ident("테이블 이름");
+        Name table = ident("테이블 이름");
         expect(LPAREN, "'('");
         List<ColumnDef> cols = new ArrayList<>();
         do {
@@ -84,37 +72,43 @@ public final class Parser {
     }
 
     private ColumnDef columnDef() {
-        String name = ident("칸 이름");
+        Name name = ident("칸 이름");
         Token typeTok = peek();
         if (typeTok.type() != IDENT) throw new SqlException(typeTok, "타입 이름 필요, 받은 것: " + describe(typeTok));
         next();
-        String type = key(typeTok.text());
+        ColumnType type = columnType(typeTok);
         List<Integer> args = new ArrayList<>();
-        if (type.equals("varchar")) {
+        if (type == ColumnType.VARCHAR) {
             expect(LPAREN, "VARCHAR 뒤 '('");
             args.add((int) unsigned(Integer.MAX_VALUE, "글자 수"));
             expect(RPAREN, "')'");
-        } else if (type.equals("decimal")) {
+        } else if (type == ColumnType.DECIMAL) {
             expect(LPAREN, "DECIMAL 뒤 '('");
             args.add((int) unsigned(Integer.MAX_VALUE, "전체 자릿수"));
             expect(COMMA, "','");
             args.add((int) unsigned(Integer.MAX_VALUE, "소수 자릿수"));
             expect(RPAREN, "')'");
-        } else if (!NO_ARG_TYPES.contains(type)) {
-            throw new SqlException(typeTok, "모르는 타입: " + typeTok.text());
         }
         boolean notNull = false;
         if (acceptKeyword("NOT")) {
             keyword("NULL");
             notNull = true;
         }
-        return new ColumnDef(name, type.toUpperCase(Locale.ROOT), args, notNull);
+        return new ColumnDef(name, type, args, notNull);
+    }
+
+    /** 타입 이름도 ASCII만 대소문자 무관: toUpperCase를 쓰면 'ınt'가 INT가 된다 */
+    private static ColumnType columnType(Token t) {
+        for (ColumnType c : ColumnType.values()) {
+            if (Name.key(c.name()).equals(Name.key(t.text()))) return c;
+        }
+        throw new SqlException(t, "모르는 타입: " + t.text());
     }
 
     private Insert insert() {
         next();
         keyword("INTO");
-        String table = ident("테이블 이름");
+        Name table = ident("테이블 이름");
         keyword("VALUES");
         List<List<Literal>> rows = new ArrayList<>();
         do {
@@ -131,20 +125,20 @@ public final class Parser {
 
     private Select select() {
         next();
-        List<String> cols = new ArrayList<>();
+        List<Name> cols = new ArrayList<>();
         if (!accept(STAR)) {
             do {
                 cols.add(ident("칸 이름"));
             } while (accept(COMMA));
         }
         keyword("FROM");
-        String table = ident("테이블 이름");
+        Name table = ident("테이블 이름");
         Expr where = acceptKeyword("WHERE") ? or() : null;
         List<OrderBy> orderBy = new ArrayList<>();
         if (acceptKeyword("ORDER")) {
             keyword("BY");
             do {
-                String col = ident("칸 이름");
+                Name col = ident("칸 이름");
                 boolean desc = acceptKeyword("DESC");
                 if (!desc) acceptKeyword("ASC");
                 orderBy.add(new OrderBy(col, desc));
@@ -156,11 +150,11 @@ public final class Parser {
 
     private Update update() {
         next();
-        String table = ident("테이블 이름");
+        Name table = ident("테이블 이름");
         keyword("SET");
         List<Assignment> sets = new ArrayList<>();
         do {
-            String col = ident("칸 이름");
+            Name col = ident("칸 이름");
             expect(EQ, "'='");
             sets.add(new Assignment(col, literal()));
         } while (accept(COMMA));
@@ -171,7 +165,7 @@ public final class Parser {
     private Delete delete() {
         next();
         keyword("FROM");
-        String table = ident("테이블 이름");
+        Name table = ident("테이블 이름");
         Expr where = acceptKeyword("WHERE") ? or() : null;
         return new Delete(table, where);
     }
@@ -192,15 +186,20 @@ public final class Parser {
 
     private Expr not() {
         if (acceptKeyword("NOT")) return new Not(not());
+        if (accept(LPAREN)) {
+            Expr e = or();
+            expect(RPAREN, "')'");
+            return e;
+        }
         return predicate();
     }
 
     private Expr predicate() {
-        Expr left = operand();
-        Token t = peek();
-        if (t.type() == EQ || t.type() == NE || t.type() == LT || t.type() == LE || t.type() == GT || t.type() == GE) {
+        Operand left = operand();
+        CompareOp op = compareOp(peek());
+        if (op != null) {
             next();
-            return new Compare(t.type(), left, operand());
+            return new Compare(op, left, operand());
         }
         if (acceptKeyword("IS")) {
             boolean not = acceptKeyword("NOT");
@@ -210,13 +209,13 @@ public final class Parser {
         Token notTok = peek();
         boolean not = acceptKeyword("NOT");
         if (acceptKeyword("BETWEEN")) {
-            Expr low = operand();
+            Operand low = operand();
             keyword("AND");
             return new Between(left, low, operand(), not);
         }
         if (acceptKeyword("IN")) {
             expect(LPAREN, "IN 뒤 '('");
-            List<Expr> items = new ArrayList<>();
+            List<Operand> items = new ArrayList<>();
             do {
                 items.add(operand());
             } while (accept(COMMA));
@@ -233,18 +232,21 @@ public final class Parser {
         return left; // `WHERE flag`처럼 값 하나도 조건 (참·거짓 판단은 평가기 #37)
     }
 
-    private Expr operand() {
-        if (accept(LPAREN)) {
-            Expr e = or();
-            expect(RPAREN, "')'");
-            return e;
-        }
-        Token t = peek();
-        if (t.type() == IDENT) {
-            next();
-            return new Column(t.text(), t.line(), t.col());
-        }
+    private Operand operand() {
+        if (peek().type() == IDENT) return new Column(ident("칸 이름"));
         return literal();
+    }
+
+    private static CompareOp compareOp(Token t) {
+        return switch (t.type()) {
+            case EQ -> CompareOp.EQ;
+            case NE -> CompareOp.NE;
+            case LT -> CompareOp.LT;
+            case LE -> CompareOp.LE;
+            case GT -> CompareOp.GT;
+            case GE -> CompareOp.GE;
+            default -> null;
+        };
     }
 
     /** 값 하나. `-` 바로 뒤 숫자는 음수 리터럴 하나로 묶고 위치는 `-` 자리 (BIGINT 최솟값이 넘치지 않게) */
@@ -284,11 +286,11 @@ public final class Parser {
 
     // ───── 토큰 다루기 ─────
 
-    private String ident(String what) {
+    private Name ident(String what) {
         Token t = peek();
         if (t.type() == IDENT) {
             next();
-            return t.text();
+            return new Name(t.text(), t.line(), t.col());
         }
         if (t.type() == KEYWORD) throw new SqlException(t, "예약어 " + t.text() + "는 " + what + "으로 쓸 수 없음");
         throw new SqlException(t, what + " 필요, 받은 것: " + describe(t));
