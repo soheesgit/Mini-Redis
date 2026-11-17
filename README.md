@@ -7,7 +7,7 @@
 ```
 .
 ├── mini-redis/    Mini Redis 서버 (Maven, JDK 25). 해시 테이블·TTL·AOF/RDB·HTTP API
-├── mini-dbms/     Mini DBMS CLI (javac, JDK 21+). INSERT·SELECT, 테이블 파일 저장
+├── mini-dbms/     Mini DBMS CLI (javac, JDK 21+). INSERT·SELECT·UPDATE·DELETE, 테이블 파일 저장
 │   └── src/main/java/minidbms/cache/RedisCache.java   ← Redis HTTP API를 부르는 연결 코드
 └── scripts/
     └── run-dbms-with-redis.sh   ← Redis 서버를 띄우고 DBMS를 캐시와 함께 실행
@@ -22,8 +22,8 @@ mini-dbms (CLI 프로세스)
 
 - 두 프로젝트는 서로의 소스를 import하지 않고 **HTTP로만** 연결됩니다. 빌드 도구와 JDK 버전이 달라도 각자 빌드하면 됩니다.
 - Redis는 라이브러리가 아니라 서버라서 **먼저 떠 있어야** 합니다. DBMS는 `MINIDBMS_REDIS` 환경변수가 있을 때만 캐시를 씁니다.
-- **캐시 키**: `dbms:{데이터 폴더 해시}:users:v{버전}:{SELECT 문 해시}`
-- **무효화**: INSERT 때 테이블 버전 키를 `INCR`로 올립니다. 그러면 다음 SELECT는 새 키를 보고, 옛 결과는 TTL(60초)이 지나 사라집니다.
+- **캐시 키**: `dbms:{데이터 폴더 해시}:users:r{파일 버전 해시}:{SELECT 구조 해시}`
+- **무효화**: 파일의 버전 정보를 캐시 키에 넣습니다. 삽입·수정·삭제 뒤에는 새 키를 사용하고, 옛 결과는 TTL(60초)이 지나 사라집니다.
 - **Redis가 꺼져 있으면**: 그 실행 동안 캐시를 끄고 파일에서 바로 읽습니다. 결과는 항상 파일 기준입니다.
 
 ## 실행

@@ -19,12 +19,9 @@ import java.util.List;
 /**
  * SELECT 결과를 Mini Redis에 캐시한다 (cache-aside).
  *
- * 키:   dbms:{데이터 폴더 해시}:{테이블}:v{버전}:{SELECT 문의 SHA-256}
- * 버전: dbms:{데이터 폴더 해시}:{테이블}:ver   (INSERT마다 INCR)
- *
- * INSERT는 지울 키를 하나하나 찾지 않고 버전만 올린다. 다음 SELECT는 새 버전 키를 보므로 옛 결과는 다시 쓰이지 않고 TTL로 사라진다.
- * 버전은 파일을 읽기 "전에" 읽는다. 그래야 조회 도중 다른 프로세스가 INSERT해도 그 결과가 옛 버전 키에만 저장된다.
- * Redis가 응답하지 않으면 이 실행 동안 캐시를 끄고 파일에서 바로 읽는다. 캐시는 성능 장치일 뿐, 정답은 항상 파일이다.
+ * 캐시 키는 데이터 경로, 테이블, 파일 버전과 조회 조건으로 구성한다.
+ * 변경은 파일 버전을 바꾸므로 캐시를 끈 CLI에서 쓴 데이터도 다음 조회에 나타난다.
+ * 이전 결과는 TTL로 만료된다. Redis가 응답하지 않으면 이 실행 동안 파일을 직접 읽는다.
  */
 // shortcut: 카운터와 disabledReason은 스레드 안전하지 않다. 단일 스레드 CLI 전제이며, Phase 3에서 엔진을 스레드끼리 공유하면 Atomic/volatile로 바꾼다
 final class QueryCache {
@@ -46,13 +43,13 @@ final class QueryCache {
         this.namespace = "dbms:" + sha256(dataDirectory.toAbsolutePath().normalize().toString()).substring(0, 12);
     }
 
-    SqlEngine.Selected select(Statement.Select select, Loader loader) throws IOException {
+    SqlEngine.Selected select(Statement.Select select, String revision, Loader loader) throws IOException {
         if (disabledReason != null) {
             return loader.load();
         }
         String key;
         try {
-            key = tableKey(select.table()) + ":v" + version(select.table()) + ":" + sha256(canonical(select));
+            key = tableKey(select.table()) + ":r" + sha256(revision) + ":" + sha256(canonical(select));
             byte[] cached = redis.get(key);
             if (cached != null) {
                 hits++;
@@ -74,21 +71,6 @@ final class QueryCache {
             disable(exception);
         }
         return result;
-    }
-
-    /**
-     * 파일에 쓴 뒤 부른다.
-     * shortcut: INCR이 실패하면(쓰기 직후 Redis가 잠깐 끊김) 옛 결과가 최대 TTL(60초)까지 보일 수 있다. 정확성이 더 중요해지면 INSERT를 실패시키거나 재시도한다.
-     */
-    void inserted(String table) {
-        if (disabledReason != null) {
-            return;
-        }
-        try {
-            redis.incr(tableKey(table) + ":ver");
-        } catch (IOException exception) {
-            disable(exception);
-        }
     }
 
     String summary() {
@@ -117,24 +99,15 @@ final class QueryCache {
         return namespace + ":" + table;
     }
 
-    // shortcut: 버전 키에 TTL이 없어서 Mini Redis를 allkeys-lru로 띄우면 버전 키가 밀려나 옛 결과가 다시 보일 수 있다. 기본 noeviction에서는 안전하다.
-    private long version(String table) throws IOException {
-        byte[] value = redis.get(tableKey(table) + ":ver");
-        if (value == null) {
-            return 0;
-        }
-        try {
-            return Long.parseLong(new String(value, StandardCharsets.UTF_8));
-        } catch (NumberFormatException exception) {
-            throw new IOException("Unexpected cache version value.", exception);
-        }
-    }
-
-    /** 같은 질의면 같은 문자열. 열 이름에는 '|'와 ','가 없고 값은 맨 끝이라 경계가 겹치지 않는다. */
+    // 값에 구분자가 포함돼도 조건의 경계를 구분할 수 있도록 값의 길이를 기록한다.
     static String canonical(Statement.Select select) {
-        var builder = new StringBuilder(select.table()).append('|').append(String.join(",", select.columns())).append('|');
-        select.where().ifPresent(condition -> builder.append(condition.column()).append('=')
-                .append(condition.value() instanceof Long ? 'L' : 'S').append(condition.value()));
+        var builder = new StringBuilder(select.table()).append('|').append(String.join(",", select.columns()));
+        for (Statement.Condition condition : select.where()) {
+            String value = condition.value().toString();
+            builder.append('|').append(condition.column()).append(':').append(condition.operator()).append(':')
+                    .append(condition.value() instanceof Long ? 'L' : 'S')
+                    .append(value.length()).append(':').append(value);
+        }
         return builder.toString();
     }
 

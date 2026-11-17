@@ -1,6 +1,6 @@
 # Mini DBMS
 
-Java로 구현한 파일 기반 미니 DBMS입니다. Phase 1 CLI는 UTF-8 SQL 파일을 읽어 `INSERT`와 `SELECT`를 실행합니다. 저장소 경로가 같으면 CLI를 종료한 뒤에도 같은 행을 조회할 수 있습니다.
+Java로 구현한 파일 기반 미니 DBMS입니다. CLI는 UTF-8 SQL 파일을 읽어 `INSERT`, `SELECT`, `UPDATE`, `DELETE`를 실행합니다. 저장소 경로가 같으면 CLI를 종료한 뒤에도 같은 행을 조회할 수 있습니다.
 
 ## 실행
 
@@ -23,9 +23,21 @@ java -cp out/main minidbms.cli.Main --data-dir "$dbms_demo_dir" out/read.sql
 ## 지원하는 SQL
 
 - `INSERT INTO users (name, email) VALUES ('소희', 'sohee@example.com');`에서 `id`는 1부터 자동으로 증가합니다. `name`과 `email`은 필수이며, 두 열의 순서는 바꿀 수 있습니다.
-- `SELECT * FROM users;`는 전체 열을 출력합니다. `SELECT id, name FROM users WHERE email = 'sohee@example.com';`처럼 조회 열과 동등 조건 하나를 지정할 수 있습니다. `id`는 정수, `name`과 `email`은 문자열과 비교합니다.
+- `SELECT name FROM users WHERE id >= 2 AND name != '';`처럼 비교를 `AND`로 연결할 수 있습니다. `id`는 정수와 `=`, `!=`, `<>`, `<`, `<=`, `>`, `>=`로 비교합니다. `name`과 `email`은 문자열과 `=`, `!=`, `<>`로 비교합니다.
+- `UPDATE users SET name = '김소희' WHERE id = 2;`는 `name` 또는 `email` 한 열을 변경합니다. `DELETE FROM users WHERE id = 2;`는 해당 행을 삭제합니다. 두 명령 모두 `WHERE id = 정수`가 필요합니다. 대상이 없으면 `UPDATE 0` 또는 `DELETE 0`이 출력됩니다.
 - 문장 사이는 세미콜론으로 구분합니다. 키워드와 식별자는 대소문자를 구분하지 않으며, `--` 줄 주석과 문자열 안의 `''` 이스케이프를 지원합니다.
-- `SELECT`는 열 이름과 행을 탭으로 구분해 출력합니다. 스크립트 전체의 구문 검사가 끝나면 문장을 순서대로 실행합니다. 실행 도중 오류가 나면 그 전에 성공한 삽입은 파일에 남습니다. Phase 1은 데이터 디렉터리 하나를 CLI 프로세스 하나가 사용하는 범위입니다.
+- `SELECT`는 열 이름과 행을 탭으로 구분해 출력합니다. 스크립트 전체의 구문 검사가 끝나면 문장을 순서대로 실행합니다. 실행 도중 오류가 나면 그 전에 성공한 변경은 파일에 남습니다. Phase 1은 데이터 디렉터리 하나를 CLI 프로세스 하나가 사용하는 범위입니다.
+
+## 수정·삭제 실습
+
+빈 데이터 디렉터리로 예제를 실행합니다. 새 CLI 프로세스로 SELECT를 다시 실행하면 수정된 이름의 ID 1만 보입니다. 삭제한 ID 2는 이후 삽입에 재사용되지 않습니다.
+
+```sh
+dbms_mutation_dir=$(mktemp -d)
+java -cp out/main minidbms.cli.Main --data-dir "$dbms_mutation_dir" examples/mutations.sql
+printf '%s\n' 'SELECT id, name FROM users;' > out/read.sql
+java -cp out/main minidbms.cli.Main --data-dir "$dbms_mutation_dir" out/read.sql
+```
 
 ## 테스트
 
@@ -39,11 +51,11 @@ java -cp out/main:out/test minidbms.sql.SqlParserTest
 java -cp out/main:out/test minidbms.cli.Phase1IntegrationTest
 ```
 
-통합 테스트는 임시 데이터를 사용합니다. 별도 JVM에서 삽입, 조회, 재삽입을 실행해 기존 행과 다음 ID가 유지되는지 확인합니다. 빈 테이블, 스키마 오류, 불완전한 레코드도 검증합니다.
+통합 테스트는 임시 데이터를 사용합니다. 별도 JVM에서 삽입, 조회, 재삽입을 실행해 기존 행과 다음 ID가 유지되는지 확인합니다. 이전 형식의 테이블 파일에서 수정·삭제가 유지되는지, 삭제한 ID를 재사용하지 않는지도 검증합니다. 빈 테이블, 스키마 오류, 불완전한 레코드도 테스트합니다.
 
 ## Mini Redis 캐시
 
-`MINIDBMS_REDIS=http://127.0.0.1:8080`처럼 Mini Redis 주소를 주면 `SELECT` 결과를 Redis에 캐시합니다. `INSERT`는 테이블 버전을 올려 옛 결과를 무효화합니다. 캐시 통계는 stderr에 `cache: hits=.. misses=..`로 출력됩니다. Redis가 응답하지 않으면 캐시를 끄고 파일에서 읽습니다. 두 서버를 함께 띄우는 방법은 루트의 `scripts/run-dbms-with-redis.sh`에 있습니다.
+`MINIDBMS_REDIS=http://127.0.0.1:8080`처럼 Mini Redis 주소를 주면 `SELECT` 결과를 Redis에 캐시합니다. 파일의 버전 정보를 캐시 키에 넣어 삽입·수정·삭제 전에 만든 조회 결과를 구분합니다. 캐시 통계는 stderr에 `cache: hits=.. misses=..`로 출력됩니다. Redis가 응답하지 않으면 캐시를 끄고 파일에서 읽습니다. 두 서버를 함께 띄우는 방법은 루트의 `scripts/run-dbms-with-redis.sh`에 있습니다.
 
 ```sh
 java -cp out/main:out/test minidbms.engine.QueryCacheTest
@@ -55,7 +67,7 @@ java -cp out/main:out/test minidbms.engine.QueryCacheTest
 
 | 단계 | 결과물 |
 | --- | --- |
-| 1 | SQL 파일 입력, `INSERT`와 `SELECT` 실행, 테이블별 파일 저장 |
+| 1 | SQL 파일 입력, `INSERT`·`SELECT`·`UPDATE`·`DELETE` 실행, 테이블별 파일 저장 |
 | 2 | 메모리 B+ 트리, 100만 건 이상 삽입, 인덱스와 선형 탐색 성능 비교 |
 | 3 | 기존 엔진을 재사용하는 HTTP API, 고정 크기 스레드 풀, 동시 요청 검증 |
 

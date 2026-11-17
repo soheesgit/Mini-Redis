@@ -30,6 +30,7 @@ public final class QueryCacheTest {
             RedisCache redis = new RedisCache(target, System.getenv("MINIREDIS_PASSWORD"));
             secondProcessHitsCache(redis);
             insertInvalidatesCache(redis);
+            uncachedMutationsInvalidateCache(redis);
             differentQueriesUseDifferentKeys(redis);
             codecKeepsValues();
             redisDownFallsBackToFile();
@@ -39,7 +40,7 @@ public final class QueryCacheTest {
                 fake.stop(0);
             }
         }
-        System.out.println("Passed 6 cache checks ("+ (url != null ? "real Mini Redis " + url : "fake Redis") + ").");
+        System.out.println("Passed 7 cache checks ("+ (url != null ? "real Mini Redis " + url : "fake Redis") + ").");
     }
 
     /** 첫 실행은 MISS, 같은 데이터 폴더를 쓰는 다음 실행(새 엔진 = 새 CLI 프로세스)은 Redis에서 HIT */
@@ -59,7 +60,7 @@ public final class QueryCacheTest {
         expect(b, a);
     }
 
-    /** INSERT가 버전을 올리면 다음 SELECT는 MISS가 되고 새 행을 본다 */
+    /** INSERT가 파일을 변경하면 다음 SELECT는 MISS가 되고 새 행을 본다 */
     private static void insertInvalidatesCache(RedisCache redis) throws IOException {
         Path dir = Files.createTempDirectory("mini-dbms-cache-");
         var engine = new SqlEngine(dir, redis);
@@ -74,6 +75,27 @@ public final class QueryCacheTest {
         expect(after.rows(), List.of(List.of(1L), List.of(2L)));
     }
 
+    private static void uncachedMutationsInvalidateCache(RedisCache redis) throws IOException {
+        Path dir = Files.createTempDirectory("mini-dbms-cache-");
+        var writer = new SqlEngine(dir);
+        run(writer, "INSERT INTO users (name, email) VALUES ('a', 'a@example.com');");
+        var reader = new SqlEngine(dir, redis);
+        String query = "SELECT name FROM users WHERE id >= 1 AND name != '';";
+        run(reader, query);
+        run(reader, query);
+        expect(reader.cacheSummary(), "cache: hits=1 misses=1");
+
+        run(writer, "UPDATE users SET name = 'b' WHERE id = 1;");
+        var afterUpdate = new SqlEngine(dir, redis);
+        expect(run(afterUpdate, query), List.of(new SqlEngine.Selected(List.of("name"), List.of(List.of("b")))));
+        expect(afterUpdate.cacheSummary(), "cache: hits=0 misses=1");
+
+        run(writer, "DELETE FROM users WHERE id = 1;");
+        var afterDelete = new SqlEngine(dir, redis);
+        expect(run(afterDelete, query), List.of(new SqlEngine.Selected(List.of("name"), List.of())));
+        expect(afterDelete.cacheSummary(), "cache: hits=0 misses=1");
+    }
+
     /** 열·조건·값 타입이 다르면 다른 키다 */
     private static void differentQueriesUseDifferentKeys(RedisCache redis) throws IOException {
         Path dir = Files.createTempDirectory("mini-dbms-cache-");
@@ -83,9 +105,11 @@ public final class QueryCacheTest {
                 SELECT * FROM users WHERE id = 1;
                 SELECT * FROM users WHERE email = 'a@example.com';
                 SELECT name FROM users WHERE id = 1;
+                SELECT * FROM users WHERE id >= 1 AND name != '';
+                SELECT * FROM users WHERE id > 1 AND name != '';
                 SELECT * FROM users WHERE id = 1;
                 """);
-        expect(engine.cacheSummary(), "cache: hits=1 misses=3");
+        expect(engine.cacheSummary(), "cache: hits=1 misses=5");
     }
 
     /** 한글·탭·줄바꿈·빈 문자열·64KB 넘는 문자열도 그대로 돌아온다 */
