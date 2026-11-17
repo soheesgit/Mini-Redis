@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.TreeMap;
@@ -31,8 +32,57 @@ class BPlusTreeTest {
                 }
                 assertEquals(ref.size(), t.size());
                 t.check();
+                if (step % 10 == 0) { // 삭제가 섞인 뒤에도 리프 연결이 맞는지
+                    assertRandomRange(t, ref, rnd, -10, 510);
+                }
             }
+
+            // 키우고 비우기: 높이 3 이상에서 전부 지워 안쪽 노드 합치기·빌리기·루트 축소까지 일으킨다
+            List<Integer> keys = new ArrayList<>();
+            for (int k = 0; k < 20_000; k++) {
+                keys.add(k);
+            }
+            Collections.shuffle(keys, rnd);
+            for (int i = 0; i < 3000; i++) {
+                int k = keys.get(i);
+                long v = rnd.nextLong() & Long.MAX_VALUE;
+                t.put(k, v);
+                ref.put(k, v);
+                assertEquals(ref.size(), t.size());
+                t.check();
+                if (i % 10 == 0) {
+                    assertRandomRange(t, ref, rnd, -100, 20_100);
+                }
+            }
+            assertTrue(t.height() >= 3, "order " + order + " height=" + t.height());
+            List<Integer> drain = new ArrayList<>(ref.keySet());
+            Collections.shuffle(drain, rnd);
+            for (int i = 0; i < drain.size(); i++) {
+                int k = drain.get(i);
+                assertEquals(ref.remove(k) != null, t.remove(k), "order " + order + " drain " + i);
+                assertEquals(ref.size(), t.size());
+                t.check();
+                if (i % 10 == 0) {
+                    assertRandomRange(t, ref, rnd, -100, 20_100);
+                }
+            }
+            assertEquals(0, t.size());
+            assertEquals(1, t.height());
         }
+    }
+
+    /** [min, max)에서 무작위 lo ≤ hi를 골라 range를 subMap과 값 목록으로 비교 */
+    private static void assertRandomRange(BPlusTree t, TreeMap<Integer, Long> ref, Random rnd, int min, int max) {
+        int a = min + rnd.nextInt(max - min), b = min + rnd.nextInt(max - min);
+        assertRange(t, ref, Math.min(a, b), Math.max(a, b));
+    }
+
+    @Test
+    void 음수_값은_거절하고_넣지_않는다() {
+        BPlusTree t = new BPlusTree(3);
+        assertThrows(IllegalArgumentException.class, () -> t.put(1, -1));
+        assertEquals(0, t.size());
+        assertEquals(BPlusTree.NONE, t.get(1));
     }
 
     @Test

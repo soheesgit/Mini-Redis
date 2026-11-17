@@ -17,7 +17,7 @@ import java.util.function.LongConsumer;
 public final class BPlusTree {
 
     public static final int DEFAULT_ORDER = 64;
-    /** get이 못 찾았을 때. 위치값은 page ≥ 1이라 음수가 될 수 없다 */
+    /** get이 못 찾았을 때. 위치값은 page ≥ 0, slot ≥ 0이라 음수가 될 수 없다 */
     public static final long NONE = -1;
 
     private abstract static class Node {
@@ -139,6 +139,9 @@ public final class BPlusTree {
     // ---- 삽입 ----
 
     public void put(int key, long value) {
+        if (value < 0) { // 음수는 get의 NONE(-1)과 구분할 수 없다
+            throw new IllegalArgumentException("값은 0 이상: " + value);
+        }
         Node sibling = insert(root, key, value);
         if (sibling != null) { // 루트가 쪼개졌다 → 새 루트를 얹어 높이 +1
             Inner nr = new Inner(order);
