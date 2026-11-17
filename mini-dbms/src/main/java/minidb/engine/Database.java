@@ -14,7 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.LongStream;
 import minidb.cache.RedisCache;
+import minidb.index.BPlusTree;
 import minidb.sql.Ast.CreateTable;
 import minidb.sql.Ast.Delete;
 import minidb.sql.Ast.Insert;
@@ -171,7 +173,7 @@ public final class Database implements AutoCloseable {
         Pages pages = new Pages(t);
         for (Object[] row : rows) {
             row[0] = (int) id++;
-            pages.append(schema.encode(row));
+            pages.append((Integer) row[0], schema.encode(row));
         }
         pages.commit();
         t.nextId(id);
@@ -189,10 +191,7 @@ public final class Database implements AutoCloseable {
         for (OrderBy o : sel.orderBy()) keys.add(order(column(schema, o.column()), o.desc()));
 
         List<Object[]> out = new ArrayList<>();
-        new Pages(t).scan((no, slot, row) -> {
-            if (Boolean.TRUE.equals(where.test(row))) out.add(row);
-            return false;
-        });
+        new Pages(t).matching(where, (no, slot, row) -> out.add(row));
         if (!keys.isEmpty()) {
             Comparator<Object[]> cmp = keys.get(0);
             for (int i = 1; i < keys.size(); i++) cmp = cmp.thenComparing(keys.get(i));
@@ -235,20 +234,18 @@ public final class Database implements AutoCloseable {
         Where where = Where.compile(up.where(), schema, zone);
         Pages pages = new Pages(t);
         List<Target> targets = new ArrayList<>();
-        pages.scan((no, slot, row) -> {
-            if (Boolean.TRUE.equals(where.test(row))) targets.add(new Target(no, slot, row));
-            return false;
-        });
+        pages.matching(where, (no, slot, row) -> targets.add(new Target(no, slot, row)));
         // 대상을 먼저 다 모았으니 옮겨 간 행을 다시 고칠 일이 없다
         for (Target g : targets) {
             Object[] row = g.row().clone();
             sets.forEach((i, v) -> row[i] = v);
             byte[] bytes = schema.encode(row);
-            if (!pages.page(g.page()).update(g.slot(), bytes)) {
-                pages.page(g.page()).delete(g.slot());
-                pages.append(bytes);
+            if (pages.page(g.page()).update(g.slot(), bytes)) {
+                pages.touch(g.page());
+            } else {
+                pages.delete(g);
+                pages.append((Integer) row[0], bytes);
             }
-            pages.touch(g.page());
         }
         pages.commit();
         return new Result(null, null, targets.size(), up.table().key());
@@ -259,13 +256,9 @@ public final class Database implements AutoCloseable {
         Where where = Where.compile(del.where(), t.schema(), zone);
         Pages pages = new Pages(t);
         List<Target> targets = new ArrayList<>();
-        pages.scan((no, slot, row) -> {
-            if (Boolean.TRUE.equals(where.test(row))) targets.add(new Target(no, slot, row));
-            return false;
-        });
+        pages.matching(where, (no, slot, row) -> targets.add(new Target(no, slot, row)));
         for (Target g : targets) {
-            pages.page(g.page()).delete(g.slot());
-            pages.touch(g.page());
+            pages.delete(g);
         }
         pages.commit();
         return new Result(null, null, targets.size(), del.table().key());
@@ -274,12 +267,13 @@ public final class Database implements AutoCloseable {
     /** 한 문장이 읽고 고치는 페이지의 메모리 복사본. 고친 것만 모아 한 번에 커밋한다 */
     private static final class Pages {
         interface Visitor {
-            boolean row(int page, int slot, Object[] row);
+            void row(int page, int slot, Object[] row);
         }
 
         private final Table table;
         private final Map<Integer, DataPage> loaded = new TreeMap<>();
         private final Set<Integer> touched = new HashSet<>();
+        private final Map<Integer, Long> indexChanges = new HashMap<>();
         private int pageCount;
 
         Pages(Table table) throws IOException {
@@ -300,39 +294,65 @@ public final class Database implements AutoCloseable {
             touched.add(n);
         }
 
-        /** 1번 페이지부터 살아 있는 행을 차례로 */
-        void scan(Visitor v) throws IOException {
-            Schema schema = table.schema();
-            for (int n = 1; n < pageCount; n++) {
-                DataPage p = page(n);
-                for (int s = 0; s < p.slotCount(); s++) {
-                    byte[] raw = p.read(s);
-                    if (raw != null && v.row(n, s, schema.decode(raw))) return;
+        void matching(Where where, Visitor visitor) throws IOException {
+            Where.IdRange range = where.idRange();
+            if (range == null) {
+                for (int no = 1; no < pageCount; no++) {
+                    DataPage p = page(no);
+                    for (int slot = 0; slot < p.slotCount(); slot++) {
+                        visit(p, slot, where, visitor);
+                    }
+                }
+            } else if (range.lo() <= range.hi()) {
+                int lo = (int) range.lo(), hi = (int) range.hi();
+                if (lo == hi) {
+                    long location = table.findId(lo);
+                    if (location != BPlusTree.NONE) visit(location, where, visitor);
+                } else {
+                    var locations = LongStream.builder();
+                    table.scanIds(lo, hi, locations);
+                    // 이동된 행도 선형 탐색과 같은 페이지·슬롯 순서로 방문한다.
+                    for (long location : locations.build().sorted().toArray()) visit(location, where, visitor);
                 }
             }
         }
 
+        private void visit(long location, Where where, Visitor visitor) throws IOException {
+            visit(page(BPlusTree.page(location)), BPlusTree.slot(location), where, visitor);
+        }
+
+        private void visit(DataPage p, int slot, Where where, Visitor visitor) {
+            byte[] raw = p.read(slot);
+            if (raw == null) return;
+            Object[] row = table.schema().decode(raw);
+            if (Boolean.TRUE.equals(where.test(row))) visitor.row(p.pageId(), slot, row);
+        }
+
         /** 마지막 페이지에, 안 들어가면 새 페이지(번호 = 지금 페이지 수)에 넣는다 */
-        void append(byte[] row) throws IOException {
-            if (pageCount > 1) {
-                int last = pageCount - 1;
-                if (page(last).insert(row) >= 0) {
-                    touched.add(last);
-                    return;
-                }
+        void append(int id, byte[] row) throws IOException {
+            int no = pageCount - 1;
+            int slot = no >= 1 ? page(no).insert(row) : -1;
+            if (slot < 0) {
+                no = pageCount++;
+                DataPage p = DataPage.empty(no);
+                loaded.put(no, p);
+                slot = p.insert(row);
             }
-            int no = pageCount++;
-            DataPage p = DataPage.empty(no);
-            loaded.put(no, p);
-            p.insert(row);
-            touched.add(no);
+            touch(no);
+            indexChanges.put(id, BPlusTree.loc(no, slot));
+        }
+
+        void delete(Target target) throws IOException {
+            page(target.page()).delete(target.slot());
+            touch(target.page());
+            indexChanges.put((Integer) target.row()[0], BPlusTree.NONE);
         }
 
         void commit() throws IOException {
             if (touched.isEmpty()) return;
             TreeMap<Integer, byte[]> images = new TreeMap<>();
             for (int n : touched) images.put(n, page(n).toBytes());
-            table.commit(images);
+            table.commit(images, indexChanges);
         }
     }
 }

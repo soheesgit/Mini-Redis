@@ -1,5 +1,6 @@
 package minidb.engine;
 
+import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,10 +23,15 @@ import minidb.type.Values;
  */
 public final class Where {
 
-    private final Function<Object[], Boolean> node;
+    /** 배타 경계(id > MAX 등)를 표현하기 위해 int보다 한 칸 넓게 계산한다. */
+    record IdRange(long lo, long hi) {}
 
-    private Where(Function<Object[], Boolean> node) {
+    private final Function<Object[], Boolean> node;
+    private final IdRange idRange;
+
+    private Where(Function<Object[], Boolean> node, IdRange idRange) {
         this.node = node;
+        this.idRange = idRange;
     }
 
     /**
@@ -34,13 +40,61 @@ public final class Where {
      * @throws SqlException 없는 칸, 비교할 수 없는 타입, 잘못된 날짜 글자, TRUE/FALSE가 아닌 조건
      */
     public static Where compile(Ast.Expr e, Schema s, ZoneId zone) {
-        if (e == null) return new Where(row -> Boolean.TRUE);
-        return new Where(new Binder(s, zone).cond(e));
+        if (e == null) return new Where(row -> Boolean.TRUE, null);
+        return new Where(new Binder(s, zone).cond(e), indexRange(e));
     }
 
     /** @param row 스키마 순서의 값 (id가 0번). @return TRUE, FALSE, 또는 unknown(null) */
     public Boolean test(Object[] row) {
         return node.apply(row);
+    }
+
+    IdRange idRange() {
+        return idRange;
+    }
+
+    private static IdRange indexRange(Ast.Expr expr) {
+        if (expr instanceof Ast.Between b && !b.not() && isId(b.value())) {
+            Integer lo = intLiteral(b.low()), hi = intLiteral(b.high());
+            return lo == null || hi == null ? null : new IdRange(lo, hi);
+        }
+        if (!(expr instanceof Ast.Compare c) || c.op() == CompareOp.NE) return null;
+        boolean idOnLeft = isId(c.left());
+        if (!idOnLeft && !isId(c.right())) return null;
+        Integer value = intLiteral(idOnLeft ? c.right() : c.left());
+        if (value == null) return null;
+        CompareOp op = idOnLeft ? c.op() : switch (c.op()) {
+            case LT -> CompareOp.GT;
+            case LE -> CompareOp.GE;
+            case GT -> CompareOp.LT;
+            case GE -> CompareOp.LE;
+            default -> c.op();
+        };
+        return switch (op) {
+            case EQ -> new IdRange(value, value);
+            case LT -> new IdRange(Integer.MIN_VALUE, (long) value - 1);
+            case LE -> new IdRange(Integer.MIN_VALUE, value);
+            case GT -> new IdRange((long) value + 1, Integer.MAX_VALUE);
+            case GE -> new IdRange(value, Integer.MAX_VALUE);
+            case NE -> null;
+        };
+    }
+
+    private static boolean isId(Ast.Operand operand) {
+        return operand instanceof Ast.Column c && c.name().key().equals("id");
+    }
+
+    private static Integer intLiteral(Ast.Operand operand) {
+        if (!(operand instanceof Ast.Literal l) || l.kind() != LiteralKind.NUMBER) return null;
+        try {
+            return switch (Values.of(l)) {
+                case Long n -> Math.toIntExact(n);
+                case BigDecimal d -> d.intValueExact();
+                default -> null;
+            };
+        } catch (ArithmeticException e) {
+            return null;
+        }
     }
 
     // ───── compile ─────

@@ -49,6 +49,20 @@ class QueryCacheTest {
     static Result sql(Database db, String sql) throws IOException { return ExecutorTest.run(db, sql); }
     static List<String> rows(Result r) { return ExecutorTest.text(r); }
 
+    @Test void cachesIndexedLookupAndRefreshesAfterIndexedMutation() throws Exception {
+        try (var server = new Server(); var db = Database.openCached(dir, false, server.client())) {
+            sql(db, "CREATE TABLE t (v INT); INSERT INTO t VALUES (10), (20);");
+            String select = "SELECT * FROM t WHERE id = 1;";
+            assertEquals(List.of("1|10"), rows(sql(db, select)));
+            assertEquals(List.of("1|10"), rows(sql(db, select)));
+            sql(db, "UPDATE t SET v = 30 WHERE id = 1;");
+            assertEquals(List.of("1|30"), rows(sql(db, select)));
+            sql(db, "DELETE FROM t WHERE id = 1;");
+            assertEquals(List.of(), rows(sql(db, select)));
+            assertEquals("cache: hits=1 misses=3", db.cacheSummary());
+        }
+    }
+
     @Test void cachesAcrossReopenAndInvalidatesUncachedWritesEvenWithSameSizeAndTimestamp() throws Exception {
         try (var server = new Server()) {
             try (var db = Database.openCached(dir, false, server.client())) {

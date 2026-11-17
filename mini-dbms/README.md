@@ -52,6 +52,34 @@ id	name	age
 
 `--fsync=off`는 커밋마다의 로그 fsync만 끈다. 프로세스가 죽어도(kill, 예외) OS 캐시에 남아 있어 문장 단위로 안전하지만, **정전·OS 크래시에서는 최근 커밋을 잃을 수 있다.** 체크포인트(종료 시, 로그 16MB 초과 시)와 복구의 fsync는 항상 한다.
 
+## Phase 2 B+ 트리 인덱스
+
+테이블마다 자동 `id`를 페이지·슬롯 위치에 연결하는 메모리 인덱스를 갖는다. 테이블을 처음 열 때 WAL을 복구한 뒤, 기존 `nextId` 복원과 같은 순회에서 살아 있는 행을 인덱싱한다. INSERT, 행이 다른 페이지로 이동한 UPDATE, DELETE는 페이지 커밋이 성공한 뒤 인덱스를 갱신한다.
+
+리프는 ID와 행 위치를 정렬해 보관하고 다음 리프를 가리킨다. 내부 노드는 각 자식의 최소 ID로 탐색 경로를 고른다. 삽입으로 용량을 넘으면 노드를 나누고, 삭제로 점유율이 낮아지면 형제와 항목을 옮기거나 합친다. 이 과정은 필요에 따라 루트까지 이어진다.
+
+SELECT·UPDATE·DELETE는 `id = 3`, `3 < id`, `id BETWEEN 2 AND 5`처럼 ID와 INT 범위 정수를 비교하는 단순 조건에서 인덱스를 사용한다. 그 밖의 조건은 선형 탐색한다. 범위 조회도 기존 페이지·슬롯 순서로 행을 읽으므로 `ORDER BY` 동률과 `LIMIT`의 결과가 선형 탐색과 동일하다.
+
+### 100만 행 벤치마크
+
+```bash
+cd mini-dbms
+mvn -q test-compile
+java -Xms256m -Xmx1g -cp target/classes:target/test-classes minidb.engine.IndexBenchmark on
+java -Xms256m -Xmx1g -cp target/classes:target/test-classes minidb.engine.IndexBenchmark off
+```
+
+각 설정에서 1,000행짜리 INSERT 1,000개를 실행했다. 정상 종료한 DB를 다시 열어 100만 행이 저장됐는지 확인했다. 재열기 시간에는 테이블의 첫 접근과 인덱스 재구축이 포함된다. Redis 캐시 없이 같은 행을 찾는 `id`와 고유 `email` 쿼리를 각각 10회 워밍업한 뒤 31회 측정했다. 고정 시드 42로 대상을 고르고 두 경로의 실행 순서를 번갈아 적용했다.
+
+Apple M4, 16 GB RAM, macOS 26.6.2, Temurin JDK 25.0.3에서 측정했다. 각 데이터 파일은 45,039,616바이트였다. 조회 시간에는 SQL 파싱과 실행, 결과 생성이 포함된다.
+
+| WAL fsync | 100만 행 삽입 | 재열기 | ID 인덱스 중앙값 / p95 | 이메일 선형 탐색 중앙값 / p95 |
+| --- | ---: | ---: | ---: | ---: |
+| on | 6.301 s | 0.186 s | 91.541 / 247.250 µs | 73.563 / 117.942 ms |
+| off | 0.876 s | 0.163 s | 100.375 / 283.958 µs | 87.736 / 126.261 ms |
+
+Redis 캐시를 켜면 캐시 키를 계산하기 위해 ID 조회에서도 전체 데이터 페이지를 읽어 해시한다.
+
 ## Redis SELECT 캐시 (team-phase1)
 
 `jiho/dbms-phase1`의 SQL·타입·페이지·WAL 엔진에 `sohee/dbms`의 HTTP 캐시 연동을 이식했다.
