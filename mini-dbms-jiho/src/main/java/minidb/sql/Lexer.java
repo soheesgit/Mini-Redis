@@ -71,8 +71,9 @@ public final class Lexer {
         int start = pos;
         while (pos < src.length() && (Character.isLetterOrDigit(peek(0)) || peek(0) == '_')) advance();
         String text = src.substring(start, pos);
-        String upper = text.toUpperCase(Locale.ROOT);
-        if (KEYWORDS.contains(upper)) {
+        // ASCII 단어만 키워드 검사: toUpperCase가 'ſ'(U+017F)→S, 'ı'(U+0131)→I 로 바꿔 ſelect가 키워드가 되는 것을 막음
+        String upper = text.chars().allMatch(ch -> ch < 128) ? text.toUpperCase(Locale.ROOT) : null;
+        if (upper != null && KEYWORDS.contains(upper)) {
             out.add(new Token(TokenType.KEYWORD, upper, l, c));
         } else {
             out.add(new Token(TokenType.IDENT, text, l, c));

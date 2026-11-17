@@ -31,6 +31,37 @@ class LexerTest {
     }
 
     @Test
+    void everyKeywordIsRecognizedInMixedCase() {
+        for (String kw : Lexer.KEYWORDS) {
+            for (int parity = 0; parity < 2; parity++) {
+                StringBuilder mixed = new StringBuilder();
+                for (int i = 0; i < kw.length(); i++) {
+                    char ch = kw.charAt(i);
+                    mixed.append(i % 2 == parity ? Character.toLowerCase(ch) : ch);
+                }
+                List<Token> ts = Lexer.tokenize(mixed.toString());
+                assertEquals(KEYWORD, ts.get(0).type(), mixed.toString());
+                assertEquals(kw, ts.get(0).text(), mixed.toString());
+            }
+        }
+    }
+
+    @Test
+    void typeNamesAreIdentifiersInAnyCase() {
+        for (String name : List.of("INT", "int", "VARCHAR", "varchar", "DECIMAL", "Decimal", "DATE", "date")) {
+            assertEquals(List.of(IDENT, EOF), types(name), name);
+            assertEquals(List.of(name), texts(name));
+        }
+    }
+
+    @Test
+    void nonAsciiLookalikesOfKeywordsAreIdentifiers() {
+        // ſ(U+017F)는 대문자로 S, ı(U+0131)는 I 가 된다. 그래도 키워드가 아님
+        assertEquals(List.of(IDENT, IDENT, EOF), types("\u017Felect \u0131nsert"));
+        assertEquals(List.of("\u017Felect", "\u0131nsert"), texts("\u017Felect \u0131nsert"));
+    }
+
+    @Test
     void identifiersKeepTheirSpellingAndTypeNamesAreIdentifiers() {
         List<Token> ts = Lexer.tokenize("Users user_name2 VARCHAR int");
         assertEquals(List.of(IDENT, IDENT, IDENT, IDENT, EOF), ts.stream().map(Token::type).toList());
