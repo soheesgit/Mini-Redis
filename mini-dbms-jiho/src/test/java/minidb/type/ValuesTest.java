@@ -36,7 +36,9 @@ class ValuesTest {
         assertEquals(0, Values.compare(2.5, new BigDecimal("2.50")));
         assertTrue(Values.compare(1, 1.5) < 0);
         assertTrue(Values.compare(Long.MAX_VALUE, Long.MAX_VALUE - 1) > 0); // double로 바꾸면 같아짐
-        assertTrue(Values.compare(0.1, new BigDecimal("0.1")) > 0); // double 0.1은 실제로 0.1000000000000000055…
+        // DOUBLE 칸 0.1과 WHERE의 0.1(BigDecimal)은 같아야 한다: 한쪽이 DOUBLE이면 double로 비교
+        assertEquals(0, Values.compare(0.1, Values.of(literal("0.1"))));
+        assertEquals(0, Values.compare(Values.of(literal("0.1")), 0.1));
         assertTrue(Values.comparable(1, new BigDecimal("1")));
     }
 

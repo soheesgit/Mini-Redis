@@ -126,6 +126,7 @@ class ConvertTest {
         assertEquals(LocalDateTime.of(2026, 11, 17, 0, 0), convert(ColumnType.DATETIME, "'2026-11-17'"));
         assertError(() -> convert(ColumnType.DATETIME, "'2026-11-17 09:05:07.1234567'"), 1, 23, "소수 초는 6자리까지");
         assertError(() -> convert(ColumnType.DATETIME, "'2026-11-17 24:00:00'"), 1, 23, "날짜·시각 형식");
+        assertError(() -> convert(ColumnType.DATETIME, "'2026-02-30 00:00:00'"), 1, 23, "날짜·시각 형식"); // 28일로 줄이지 않음
         assertError(() -> convert(ColumnType.DATETIME, "'2026-11-17T09:00:00'"), 1, 23, "날짜·시각 형식");
     }
 

@@ -62,7 +62,7 @@ public final class Values {
     }
 
     /**
-     * 음수·0·양수. 숫자는 정확하게(double도 BigDecimal로 바꿔) 비교한다. 문자열은 대소문자 구분.
+     * 음수·0·양수. INT·BIGINT·DECIMAL끼리는 정확하게, 한쪽이 DOUBLE이면 double로 비교한다. 문자열은 대소문자 구분.
      * null(SQL NULL)은 받지 않는다: 3값 논리는 평가기(#37)가 한다.
      *
      * @throws IllegalArgumentException {@link #comparable}이 거짓일 때
@@ -71,6 +71,8 @@ public final class Values {
     public static int compare(Object a, Object b) {
         if (a instanceof Number x && b instanceof Number y) {
             if (isIntegral(x) && isIntegral(y)) return Long.compare(x.longValue(), y.longValue());
+            // 한쪽이 DOUBLE이면 double로 (MySQL과 같음). 정확히 비교하면 DOUBLE 칸 0.1과 WHERE의 0.1이 다르다고 나온다
+            if (x instanceof Double || y instanceof Double) return Double.compare(x.doubleValue(), y.doubleValue());
             return decimal(x).compareTo(decimal(y));
         }
         if (a.getClass() != b.getClass()) {
@@ -85,11 +87,7 @@ public final class Values {
     }
 
     private static BigDecimal decimal(Number x) {
-        return switch (x) {
-            case BigDecimal d -> d;
-            case Double d -> new BigDecimal(d); // 정확한 2진 값 그대로 (BigDecimal.valueOf는 10진 글자를 거침)
-            default -> BigDecimal.valueOf(x.longValue());
-        };
+        return x instanceof BigDecimal d ? d : BigDecimal.valueOf(x.longValue());
     }
 
     private static String typeName(Object v) {
