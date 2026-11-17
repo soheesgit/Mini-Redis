@@ -9,6 +9,7 @@
 ├── mini-redis/    Mini Redis 서버 (Maven, JDK 25). 해시 테이블·TTL·AOF/RDB·HTTP API
 ├── mini-dbms/     Mini DBMS CLI (javac, JDK 21+). INSERT·SELECT, 테이블 파일 저장
 │   └── src/main/java/minidbms/cache/RedisCache.java   ← Redis HTTP API를 부르는 연결 코드
+├── mini-dbms-jiho/ Mini DBMS 재작성 (Maven, JDK 25, 8KB 페이지·WAL·복구·WHERE). README 참고
 └── scripts/
     └── run-dbms-with-redis.sh   ← Redis 서버를 띄우고 DBMS를 캐시와 함께 실행
 ```
