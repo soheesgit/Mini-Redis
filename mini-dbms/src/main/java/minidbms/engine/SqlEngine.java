@@ -14,9 +14,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+/** 파싱된 문장을 스키마에 맞게 검증하고 테이블 파일에 삽입하거나 조회한다. */
 public final class SqlEngine {
-    private static final Map<String, List<String>> CATALOG = Map.of("users", List.of("id", "name", "email"));
+    // 카탈로그는 미리 정의한 테이블과 파일의 열 순서를 기록한다. 첫 열은 BIGINT ID이고 이후 열은 TEXT다.
+    private static final Map<String, List<String>> CATALOG =
+        Map.of("users", List.of("id", "name", "email"));
 
+    // 실행 결과를 구조화해 콜백으로 전달한다. 터미널에 어떻게 표시할지는 호출자가 결정한다.
     public sealed interface Result permits Inserted, Selected {}
 
     public record Inserted(long id) implements Result {}
@@ -43,6 +47,7 @@ public final class SqlEngine {
     }
 
     public void execute(String sql, Consumer<Result> onResult) throws IOException {
+        // 전체 스크립트의 구문 검사를 먼저 끝내므로 뒤 문장에 구문 오류가 있어도 파일에 쓰지 않는다.
         List<Statement> statements = SqlParser.parse(sql);
         if (statements.isEmpty()) {
             throw new SqlException("SQL file is empty.");
@@ -52,6 +57,7 @@ public final class SqlEngine {
             if (schema == null) {
                 throw new SqlException("Unknown table '" + statement.table() + "'.");
             }
+            // 같은 실행기에서 테이블 객체를 재사용하면 다음 삽입 때 파일을 다시 훑을 필요가 없다.
             TableFile tableFile = tableFiles.computeIfAbsent(statement.table(),
                     name -> new TableFile(dataDirectory.resolve(name + ".tbl"), schema.size() - 1));
             Result result = switch (statement) {
@@ -66,6 +72,7 @@ public final class SqlEngine {
                         ? select(select, schema, tableFile)
                         : cache.select(select, () -> select(select, schema, tableFile));
             };
+            // 문장별로 결과를 전달한다. 이후 문장의 스키마 오류가 이미 저장한 행을 되돌리지는 않는다.
             onResult.accept(result);
         }
     }
@@ -75,6 +82,7 @@ public final class SqlEngine {
             throw new SqlException("INSERT column and value counts differ.");
         }
 
+        // INSERT에 적힌 순서와 관계없이 TEXT 값을 스키마의 저장 순서에 맞춘다. ID는 저장소가 채운다.
         String[] textValues = new String[schema.size() - 1];
         for (int item = 0; item < insert.columns().size(); item++) {
             String column = insert.columns().get(item);
@@ -100,8 +108,10 @@ public final class SqlEngine {
 
     private static Selected select(Statement.Select select, List<String> schema, TableFile tableFile) throws IOException {
         List<String> columns = select.columns().isEmpty() ? schema : select.columns();
+        // 출력할 열의 위치를 한 번 계산한다. 배열 순서가 SELECT에 적힌 출력 순서다.
         int[] projection = columns.stream().mapToInt(column -> columnIndex(schema, column)).toArray();
 
+        // 위치 -1은 WHERE 조건이 없음을 뜻한다. 조건이 있으면 행을 읽기 전에 열과 값의 타입을 확인한다.
         int filterColumn = -1;
         Object filterValue = null;
         if (select.where().isPresent()) {
@@ -118,6 +128,7 @@ public final class SqlEngine {
         int matchColumn = filterColumn;
         Object matchValue = filterValue;
         var rows = new ArrayList<List<Object>>();
+        // Phase 1에서는 ID 조건도 파일 전체를 순차 탐색한다. 일치하는 행에서 요청한 열만 꺼낸다.
         tableFile.forEachRow(row -> {
             if (matchColumn < 0 || valueAt(row, matchColumn).equals(matchValue)) {
                 var projected = new ArrayList<Object>(projection.length);

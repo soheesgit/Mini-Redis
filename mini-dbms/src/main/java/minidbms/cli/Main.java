@@ -12,6 +12,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.StringJoiner;
 
+/** SQL 파일을 읽어 실행기에 넘기고, 실행 결과를 터미널에 출력한다. */
 public final class Main {
     private Main() {}
 
@@ -22,6 +23,7 @@ public final class Main {
         }
     }
 
+    // 출력 스트림을 인자로 받아 테스트에서 JVM을 종료하지 않고 출력과 종료 코드를 확인할 수 있다.
     static int run(String[] args, PrintStream out, PrintStream err) {
         if (args.length == 1 && args[0].equals("--help")) {
             printUsage(out);
@@ -43,6 +45,7 @@ public final class Main {
             return 1;
         }
 
+        // 종료 코드 2는 명령이나 SQL 입력 오류, 1은 파일 읽기 또는 저장 오류를 뜻한다.
         try {
             Path dataDirectory = Path.of(customDirectory ? args[1] : "data");
             // MINIDBMS_REDIS(예: http://127.0.0.1:8080)가 있으면 Mini Redis를 캐시로 쓴다
@@ -68,6 +71,7 @@ public final class Main {
                 out.println(String.join("\t", selected.columns()));
                 for (var row : selected.rows()) {
                     var line = new StringJoiner("\t");
+                    // 값 안의 탭과 줄바꿈이 열과 행의 구분자로 보이지 않도록 이스케이프한다.
                     for (Object value : row) {
                         line.add(value.toString().replace("\\", "\\\\")
                                 .replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n"));

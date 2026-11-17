@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/** CLI 인자와 입력 파일 오류를 종료 코드, 표준 출력, 표준 오류로 확인한다. */
 public final class MainTest {
     private MainTest() {}
 
@@ -30,6 +31,7 @@ public final class MainTest {
     }
 
     private static void check(String[] args, int expectedCode, String expectedOut, String expectedErr) {
+        // 실제 터미널 대신 메모리 버퍼로 출력을 받아 stdout과 stderr를 따로 검사한다.
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         int exitCode;

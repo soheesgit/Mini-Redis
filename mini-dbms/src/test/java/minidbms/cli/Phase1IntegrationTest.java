@@ -13,12 +13,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/** 별도 JVM으로 CLI를 실행해 SQL 입력부터 파일 저장과 조회까지 검증한다. */
 public final class Phase1IntegrationTest {
     private record Run(int code, String stdout, String stderr) {}
 
     private Phase1IntegrationTest() {}
 
     public static void main(String[] args) throws Exception {
+        // 세 시나리오는 같은 임시 DB를 사용한다. 영속성 테스트로 만든 파일로 오류 처리까지 확인한다.
         Path workspace = Files.createTempDirectory("mini-dbms-phase1-");
         try {
             verifiesPersistence(workspace);
@@ -53,6 +55,7 @@ public final class Phase1IntegrationTest {
                 2\tO'Brien; Jr.\tobrien@example.com
                 """);
 
+        // 새 프로세스가 기존 파일에서 조회하고, SELECT가 파일 바이트를 바꾸지 않는지 확인한다.
         byte[] beforeSelect = Files.readAllBytes(table);
         expectSuccess(run(workspace, """
                 SELECT name, id FROM users WHERE id = 2;
@@ -68,6 +71,7 @@ public final class Phase1IntegrationTest {
         expectSameBytes(beforeSelect, table);
 
         expectSuccess(run(workspace, "SELECT id FROM users;", "--data-dir", "another-database"), "id\n");
+        // 재실행 후 첫 INSERT가 1로 초기화되지 않고 기존 마지막 ID의 다음 번호를 쓰는지 검증한다.
         expectSuccess(run(workspace, "INSERT INTO users (name, email) VALUES ('New\tLine\nHere', '');"),
                 "INSERT 1 (id=3)\n");
         expectSuccess(run(workspace, "SELECT name, email FROM users WHERE id = 3;"),
@@ -90,6 +94,7 @@ public final class Phase1IntegrationTest {
                 2, "", "generated automatically");
         expectError(run(workspace, "INSERT INTO users (name, email) VALUES (1, 'x');"), 2, "", "requires TEXT");
 
+        // 두 번째 문장의 구문 오류는 실행 시작 전에, 없는 테이블 오류는 첫 INSERT가 끝난 뒤에 발견된다.
         String insert = "INSERT INTO users (name, email) VALUES ('committed', 'x');";
         expectError(run(workspace, insert + " SELECT * FROM"), 2, "", "Expected an identifier");
         expectSameBytes(original, table);
@@ -102,6 +107,7 @@ public final class Phase1IntegrationTest {
     private static void reportsCorruptRecords(Path workspace) throws Exception {
         Path table = workspace.resolve("data/users.tbl");
         long validSize = Files.size(table);
+        // 정상 데이터 뒤에 1바이트만 붙여 다음 레코드의 4바이트 길이 필드가 잘린 상황을 만든다.
         Files.write(table, new byte[] {0}, StandardOpenOption.APPEND);
         byte[] corrupt = Files.readAllBytes(table);
 
@@ -111,6 +117,7 @@ public final class Phase1IntegrationTest {
                 "at byte " + validSize + ": incomplete record length");
         expectSameBytes(corrupt, table);
 
+        // 원래 길이로 돌린 뒤 이번에는 길이 필드가 온전하고 본문만 잘린 레코드를 만든다.
         Files.write(table, Arrays.copyOf(corrupt, (int) validSize));
         Files.write(table, new byte[] {0, 0, 0, 16, 0}, StandardOpenOption.APPEND);
         expectError(run(workspace, "SELECT * FROM users;"), 1, "",
@@ -121,6 +128,7 @@ public final class Phase1IntegrationTest {
         Path sqlFile = Files.writeString(workspace.resolve("query.sql"), sql);
         Path stdout = workspace.resolve("stdout.txt");
         Path stderr = workspace.resolve("stderr.txt");
+        // 자식 프로세스는 임시 디렉터리에서 실행하므로 클래스 경로를 미리 절대 경로로 바꾼다.
         String classpath = Arrays.stream(System.getProperty("java.class.path").split(Pattern.quote(File.pathSeparator)))
                 .map(path -> Path.of(path).toAbsolutePath().toString())
                 .collect(Collectors.joining(File.pathSeparator));
