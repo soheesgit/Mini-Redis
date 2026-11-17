@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import minidb.cache.RedisCache;
 import minidb.sql.Ast.CreateTable;
 import minidb.sql.Ast.Delete;
 import minidb.sql.Ast.Insert;
@@ -37,6 +38,7 @@ import minidb.type.Values;
  */
 public final class Database implements AutoCloseable {
 
+    private QueryCache cache;
     private final Path dir;
     private final boolean fsyncLog;
     private final Faults faults;
@@ -51,6 +53,17 @@ public final class Database implements AutoCloseable {
 
     public static Database open(Path dir, boolean fsyncLog) throws IOException {
         return open(dir, fsyncLog, Faults.NONE);
+    }
+
+    /** Redis는 선택 사항이다. 기존 open은 환경변수와 무관하게 캐시 없이 동작한다. */
+    public static Database openCached(Path dir, boolean fsyncLog, RedisCache redis) throws IOException {
+        Database db = open(dir, fsyncLog);
+        if (redis != null) db.cache = new QueryCache(redis, dir.toRealPath(), db.zone);
+        return db;
+    }
+
+    public synchronized String cacheSummary() {
+        return cache == null ? null : cache.summary();
     }
 
     /** 테스트가 쓰기 실패를 흉내 낼 때 */
@@ -75,7 +88,8 @@ public final class Database implements AutoCloseable {
             return switch (st) {
                 case CreateTable s -> create(s);
                 case Insert s -> insert(s);
-                case Select s -> select(s);
+                case Select s -> cache == null ? select(s)
+                        : cache.select(s, table(s.table()).contentRevision(), () -> select(s));
                 case Update s -> update(s);
                 case Delete s -> delete(s);
             };

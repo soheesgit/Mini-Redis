@@ -100,6 +100,22 @@ public final class Table implements AutoCloseable {
         }
     }
 
+    /** 복구가 끝난 페이지 내용의 버전. 파일 시각·크기에 의존하지 않아 같은 크기의 UPDATE도 구분한다.
+     * 캐시 hit에서도 페이지 I/O는 발생한다. 동시 다중 프로세스 접근은 기존 엔진과 같이 지원하지 않는다. */
+    public String contentRevision() throws IOException {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            int count = pageFile.pageCount();
+            byte[] metadata = pageFile.schema();
+            digest.update(java.nio.ByteBuffer.allocate(4).putInt(metadata.length).array());
+            digest.update(metadata);
+            for (int n = 1; n < count; n++) digest.update(pageFile.readPage(n));
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     public Schema schema() {
         return schema;
     }

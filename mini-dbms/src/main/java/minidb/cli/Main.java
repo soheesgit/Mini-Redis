@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import minidb.cache.RedisCache;
 import minidb.engine.Database;
 import minidb.engine.Result;
 import minidb.sql.Ast.CreateTable;
@@ -54,8 +55,9 @@ public final class Main {
                 sql = sb.toString();
             }
             List<Statement> statements = Parser.parse(sql);
-            try (Database db = Database.open(dir, fsync)) {
+            try (Database db = Database.openCached(dir, fsync, RedisCache.fromEnvironment())) {
                 for (Statement st : statements) print(db, st, db.execute(st), out);
+                if (db.cacheSummary() != null) err.println(db.cacheSummary());
             }
             return 0;
         } catch (SqlException | StorageException | IOException e) {
