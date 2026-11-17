@@ -21,6 +21,8 @@ import minidb.sql.Ast.CreateTable;
 import minidb.sql.Ast.Literal;
 import minidb.sql.Ast.Name;
 import minidb.sql.SqlException;
+import minidb.storage.MetaPage;
+import minidb.storage.StorageException;
 
 /**
  * 테이블 스키마: 칸 목록, 0번은 언제나 자동 id 칸 (설계 1.1). 정의 검사, INSERT·UPDATE 값 검사,
@@ -51,8 +53,12 @@ public record Schema(List<Column> columns) {
         cols.add(ID);
         long size = bitmapSize(defs.size() + 1) + ID.maxSize();
         Set<String> seen = new HashSet<>();
+        long metaSize = 2 + metaSize(ID);
         for (ColumnDef d : defs) {
             Name name = d.name();
+            if (name.text().getBytes(StandardCharsets.UTF_8).length > 255) {
+                throw err(name, "칸 이름은 UTF-8 255바이트까지");
+            }
             if (name.key().equals("id")) throw err(name, "id 칸은 자동으로 붙으므로 선언할 수 없음");
             if (!seen.add(name.key())) throw err(name, "같은 이름의 칸이 이미 있음: " + name.text());
             int n = 0, s = 0;
@@ -68,6 +74,10 @@ public record Schema(List<Column> columns) {
                 if (s > n) throw err(name, "DECIMAL 소수 자릿수는 전체 자릿수 이하: DECIMAL(" + n + "," + s + ")");
             }
             Column c = new Column(name.text(), d.type(), n, s, d.notNull());
+            metaSize += metaSize(c);
+            if (metaSize > MetaPage.MAX_SCHEMA) {
+                throw err(name, "스키마가 메타 페이지(" + MetaPage.MAX_SCHEMA + "B)에 안 들어감 (이 칸까지 " + metaSize + "B)");
+            }
             size += c.maxSize();
             if (size > MAX_ROW_SIZE) {
                 throw err(name, "행 최대 크기가 " + MAX_ROW_SIZE + "B를 넘음 (이 칸까지 " + size + "B)");
@@ -75,6 +85,47 @@ public record Schema(List<Column> columns) {
             cols.add(c);
         }
         return new Schema(cols);
+    }
+
+    // ───── 메타 페이지 바이트 (설계 1.4) ─────
+    // 칸 개수 2B | 칸마다: 이름 길이 1B, 이름, 타입 코드 1B, 인자1 2B(n 또는 p), 인자2 1B(s), flags 1B(bit0 = NOT NULL)
+
+    private static final ColumnType[] TYPES = ColumnType.values(); // 코드 = 순서 + 1 (INT 1 … TIMESTAMP 9)
+
+    private static int metaSize(Column c) {
+        return 1 + c.name().getBytes(StandardCharsets.UTF_8).length + 1 + 2 + 1 + 1;
+    }
+
+    /** 메타 페이지 8번 위치부터 들어갈 바이트 */
+    public byte[] toBytes() {
+        ByteBuffer b = ByteBuffer.allocate(2 + columns.stream().mapToInt(Schema::metaSize).sum());
+        b.putShort((short) columns.size());
+        for (Column c : columns) {
+            byte[] name = c.name().getBytes(StandardCharsets.UTF_8);
+            b.put((byte) name.length).put(name).put((byte) (c.type().ordinal() + 1))
+                    .putShort((short) c.n()).put((byte) c.s()).put((byte) (c.notNull() ? 1 : 0));
+        }
+        return b.array();
+    }
+
+    /** {@link #toBytes}의 반대. 칸 개수로 끝을 알기에 뒤의 0은 무시. 모르는 타입 코드·잘린 바이트는 StorageException(0번 페이지) */
+    public static Schema fromBytes(byte[] bytes) {
+        ByteBuffer b = ByteBuffer.wrap(bytes);
+        try {
+            int count = b.getShort() & 0xFFFF;
+            List<Column> cols = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                byte[] name = new byte[b.get() & 0xFF];
+                b.get(name);
+                int code = b.get() & 0xFF;
+                if (code < 1 || code > TYPES.length) throw new StorageException(0, "모르는 타입 코드 " + code);
+                int n = b.getShort() & 0xFFFF, s = b.get() & 0xFF;
+                cols.add(new Column(new String(name, StandardCharsets.UTF_8), TYPES[code - 1], n, s, (b.get() & 1) != 0));
+            }
+            return new Schema(cols);
+        } catch (java.nio.BufferUnderflowException e) {
+            throw new StorageException(0, "스키마 바이트가 중간에 끊김");
+        }
     }
 
     /** 이름(대소문자 무관)으로 칸 번호. 없으면 -1. id는 0 */
