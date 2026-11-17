@@ -315,6 +315,83 @@ class ParserTest {
         assertError("SELECT * FROM t SELECT * FROM u;", 1, 17, "';' 필요");
     }
 
+    // ───── 빈 곳 채우기 (리뷰 G11) ─────
+
+    @Test
+    void keywordsIgnoreCase() {
+        Select s = (Select) one("sElEcT a FrOm t WhErE NoT a Is NuLl AnD b BeTwEeN 1 aNd 2 oR c LiKe 'x' oRdEr By a DeSc LiMiT 3;");
+        assertEquals("OR(AND(NOT(IS_NULL(a)),BETWEEN(b,1,2)),LIKE(c,'x'))", show(s.where()));
+        assertEquals(List.of(new OrderBy(new Name("a", 1, 82), true)), s.orderBy());
+        assertEquals(3L, s.limit());
+        assertEquals(new ColumnDef(new Name("a", 1, 17), ColumnType.INT, List.of(), true),
+                ((CreateTable) one("cReAtE tAbLe t (a InT nOt NuLl);")).columns().get(0));
+        assertEquals(List.of(LiteralKind.BOOLEAN, LiteralKind.NULL),
+                ((Insert) one("iNsErT iNtO t vAlUeS (tRuE, nUlL);")).rows().get(0).stream().map(Literal::kind).toList());
+        assertEquals("NOT_IN(b,[1])", show(((Update) one("uPdAtE t sEt a = 1 wHeRe b nOt In (1);")).where()));
+        assertEquals(new Delete(new Name("t", 1, 13), null), one("dElEtE fRoM t;"));
+    }
+
+    @Test
+    void reservedWordsAreNotNames() {
+        assertError("CREATE TABLE select (a INT);", 1, 14, "테이블 이름으로 예약어를 쓸 수 없음: SELECT");
+        assertError("CREATE TABLE t (from INT);", 1, 17, "칸 이름으로 예약어를 쓸 수 없음: FROM");
+        assertError("CREATE TABLE t (a INT, Limit INT);", 1, 24, "칸 이름으로 예약어를 쓸 수 없음: LIMIT");
+        assertError("INSERT INTO values VALUES (1);", 1, 13, "테이블 이름으로 예약어를 쓸 수 없음: VALUES");
+        assertError("UPDATE order SET a = 1;", 1, 8, "테이블 이름으로 예약어를 쓸 수 없음: ORDER");
+        assertError("UPDATE t SET where = 1;", 1, 14, "칸 이름으로 예약어를 쓸 수 없음: WHERE");
+        assertError("SELECT * FROM t ORDER BY limit;", 1, 26, "칸 이름으로 예약어를 쓸 수 없음: LIMIT");
+        assertError("DELETE FROM where;", 1, 13, "테이블 이름으로 예약어를 쓸 수 없음: WHERE");
+        assertError("SELECT * FROM t WHERE select = 1;", 1, 23, "값 필요"); // 조건 자리의 예약어
+    }
+
+    @Test
+    void commentsInsideAStatement() {
+        Select s = (Select) one("SELECT * -- c\nFROM t -- d\nWHERE a = 1; -- e");
+        assertEquals(new Name("t", 2, 6), s.table());
+        Compare c = (Compare) s.where();
+        assertEquals(new Column(new Name("a", 3, 7)), c.left());
+        assertEquals(new Literal(LiteralKind.NUMBER, "1", 3, 11), c.right());
+        assertError("SELECT * -- c\nFROM -- d\n;", 3, 1, "테이블 이름 필요");
+        assertError("SELECT * FROM t -- c\n", 2, 1, "';' 필요, 받은 것: 입력 끝");
+        assertEquals(List.of(), Parser.parse(""));
+    }
+
+    @Test
+    void errorPositionsAcrossLines() {
+        assertError("CREATE TABLE t (\n  a INT,\n  b TEXT\n);", 3, 5, "모르는 타입: TEXT");
+        assertError("SELECT *\nFROM t\nWHERE a = ;", 3, 11, "값 필요");
+        assertError("UPDATE t\n  SET a = 1\n  WHERE (b = 2\n;", 4, 1, "')' 필요");
+    }
+
+    @Test
+    void numberEdges() {
+        assertEquals(0L, ((Select) one("SELECT * FROM t LIMIT 0;")).limit());
+        assertEquals(7L, ((Select) one("SELECT * FROM t LIMIT 007;")).limit());
+        // '-'와 숫자 사이 공백·개행도 음수 리터럴 하나 (MySQL과 같음), 위치는 '-'
+        List<Literal> row = ((Insert) one("INSERT INTO t VALUES (- 1, -\n2);")).rows().get(0);
+        assertEquals(List.of(new Literal(LiteralKind.NUMBER, "-1", 1, 23), new Literal(LiteralKind.NUMBER, "-2", 1, 28)), row);
+        assertEquals("EQ(a,-1)", where("a = - 1"));
+    }
+
+    @Test
+    void emptyAndTrailingCommaErrors() {
+        assertError("UPDATE t SET;", 1, 13, "칸 이름 필요, 받은 것: ';'");
+        assertError("UPDATE t SET a = 1,;", 1, 20, "칸 이름 필요");
+        assertError("SELECT a, FROM t;", 1, 11, "칸 이름으로 예약어를 쓸 수 없음: FROM");
+        assertError("INSERT INTO t VALUES (1,);", 1, 25, "값 필요");
+        assertError("INSERT INTO t VALUES (1),;", 1, 26, "'(' 필요");
+        assertError("CREATE TABLE t (a INT,);", 1, 23, "칸 이름 필요");
+        assertError("SELECT * FROM t ORDER BY a,;", 1, 28, "칸 이름 필요");
+        assertError("SELECT * FROM t WHERE a IN (1,);", 1, 31, "값 필요");
+    }
+
+    @Test
+    void misplacedClauses() {
+        assertError("SELECT * FROM t ORDER BY a DESC ASC;", 1, 33, "';' 필요, 받은 것: 'ASC'");
+        assertError("SELECT * FROM t WHERE a = 1 WHERE b = 2;", 1, 29, "';' 필요");
+        assertError("SELECT * FROM t WHERE a NOT NOT IN (1);", 1, 25, "NOT은 BETWEEN, IN, LIKE 앞에만");
+    }
+
     @Test
     void identifierKeyIgnoresCaseButNotLookalikes() {
         assertEquals(Name.key("users"), Name.key("USERS"));
