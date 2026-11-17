@@ -371,7 +371,7 @@ SELECT   API 서버 ─▶ Redis GET ──hit──▶ 응답
   - TTL은 필수: 쓰기 때 `INCR`이 실패(Redis 장애)하면 버전이 안 올라가, Redis가 돌아온 뒤 옛 값이 나올 수 있음. TTL이 그 시간을 제한함
   - 서버가 시작해 테이블을 열 때 그 테이블 버전을 `INCR`한다. 로그 fsync 뒤 `INCR` 전에 죽었으면, 재시작 뒤 커밋 전 결과가 캐시에서 나올 수 있기 때문
 - **[미정]** TTL 길이, Redis 연결 시간 제한, 결과가 너무 크면 SET 건너뛰기 기준
-- 참고 구현: 소희 `mini-dbms/src/main/java/minidbms/cache/RedisCache.java` (Mini Redis HTTP API `/keys/{key}`)
+- 참고 구현: 소희 `team-dbms` 브랜치의 `mini-dbms/src/main/java/minidbms/cache/RedisCache.java` (Mini Redis HTTP API `/keys/{key}`)
 
 ---
 

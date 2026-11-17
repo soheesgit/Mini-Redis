@@ -4,13 +4,11 @@ build/
 target/
 /out/
 /bin/
-/mini-dbms/out/
 *.class
 
 # Local database files and configuration
 data/
 data-demo/
-/mini-dbms/data/
 .env
 .env.*
 !.env.example
