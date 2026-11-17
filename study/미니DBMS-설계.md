@@ -27,12 +27,14 @@
 표준 SQL(MySQL 명령 모양)만 받는다. 파이썬식 표현(`==`, `True`, `None` 등)은 받지 않는다.
 
 ```sql
+CREATE TABLE users (name VARCHAR(20), age INT);
 INSERT INTO users VALUES ('kim', 20);
 SELECT * FROM users WHERE id = 1;
 UPDATE users SET age = 21 WHERE name = 'kim';
 DELETE FROM users WHERE age < 20;
 ```
 
+- 테이블은 `CREATE TABLE`로 정의한다 [확정]. 스키마는 그 테이블 파일의 0번 메타 페이지에 저장 (1.4)
 - 키워드는 대소문자 무관 (`select`, `TRUE`, `null` 모두 같음)
 - 같지 않음은 `<>`와 `!=` 둘 다 받는다 (MySQL도 둘 다 지원)
 - WHERE가 없는 UPDATE · DELETE는 전체 행에 적용 (MySQL과 같음)
@@ -297,7 +299,6 @@ SELECT   API 서버 ─▶ Redis GET ──hit──▶ 응답
 
 | 항목 | 선택지 |
 |---|---|
-| 테이블 정의 방법 | `CREATE TABLE` 지원 / 스키마를 미리 만들어 두기 |
 | 칸별 `NOT NULL` | 지원 / 모든 칸 NULL 허용 (id 제외) |
 | `TEXT` / `BLOB` | 오버플로 페이지 구현 / 미지원 (VARCHAR 한도로 대체). 제안: 미지원 — 오버플로 페이지는 행 형식과 페이지 종류를 바꿈 |
 | id 칸 정의 | 사용자가 선언 / 자동으로 맨 앞에 추가. 타입 INT / BIGINT. `SELECT *`에 나오는지. INSERT에서 id를 생략하는 규칙 |
@@ -324,6 +325,7 @@ SELECT   API 서버 ─▶ Redis GET ──hit──▶ 응답
 | 바이너리 행, 스키마 순서 | 길이 계산이 정확해야 페이지 빈 공간 관리 가능, 칸 위치가 스키마로 정해짐 |
 | 표준 SQL(MySQL)만, 파이썬식 표현 제거 (A안 철회) | 사용자 결정. 문법이 하나라 렉서 · 파서 · 테스트가 단순. `!=`는 MySQL도 지원해 유지 |
 | Phase 1에 UPDATE · DELETE 포함 | 사용자 결정. 페이지 + 슬롯 설계가 이미 행 이동 · 삭제를 대비함 |
+| `CREATE TABLE` 지원 | 사용자 결정. 스키마를 0번 메타 페이지에 두는 설계와 맞고, 테스트를 SQL만으로 쓸 수 있음 |
 | Redis 캐시는 API 서버 층에서 호출 (실행기 안 아님) | 엔진이 외부 서비스에 의존하지 않음, 실무 cache-aside 구조와 같음. 무효화는 실행기가 바뀐 테이블 이름을 돌려줘서 해결 |
 | BIGINT (LONG 아님) | MySQL에서 LONG = MEDIUMTEXT |
 | TIMESTAMP는 UTC 저장 + 서버 시간대 변환, DATETIME은 변환 없음 | MySQL과 같은 의미 |
