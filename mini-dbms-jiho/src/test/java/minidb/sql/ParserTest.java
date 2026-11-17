@@ -71,10 +71,23 @@ class ParserTest {
         assertError("CREATE TABLE t (a VARCHAR(1.));", 1, 27, "0 이상의 정수");
         assertError("CREATE TABLE t (a VARCHAR(-3));", 1, 27, "0 이상의 정수");
         assertError("CREATE TABLE t (a VARCHAR(99999999999));", 1, 27, "너무 큼");
-        assertError("CREATE TABLE t (a DECIMAL(10));", 1, 29, "','");
-        assertError("CREATE TABLE t (a INT(11));", 1, 22, "')'");
+        assertError("CREATE TABLE t (a DECIMAL(10,));", 1, 30, "소수 자릿수는 0 이상의 정수"); // DECIMAL(10)은 받음 (G9)
+        assertError("CREATE TABLE t (a DECIMAL());", 1, 27, "전체 자릿수는 0 이상의 정수");
+        assertError("CREATE TABLE t (a DECIMAL(10 2));", 1, 30, "')' 필요");
+        assertError("CREATE TABLE t (a INT(11));", 1, 22, "INT(n) 같은 표시 폭은 지원 안 함");
+        assertError("CREATE TABLE t (a bigint(20));", 1, 25, "bigint(n) 같은 표시 폭은 지원 안 함");
+        assertError("CREATE TABLE t (a INT NULL NULL);", 1, 28, "')' 필요");
         assertError("CREATE TABLE t (a INT NOT);", 1, 26, "NULL 필요");
         assertError("CREATE TABLE t ();", 1, 17, "칸 이름 필요");
+    }
+
+    @Test
+    void decimalDefaultsAndExplicitNull() {
+        CreateTable c = (CreateTable) one(
+                "CREATE TABLE t (a DECIMAL, b DECIMAL(5), c decimal(7, 3), d INT NULL, e INT NOT NULL, f DECIMAL NULL);");
+        assertEquals(List.of(List.of(10, 0), List.of(5, 0), List.of(7, 3), List.of(), List.of(), List.of(10, 0)),
+                c.columns().stream().map(ColumnDef::args).toList()); // MySQL 기본 p=10, s=0
+        assertEquals(List.of(false, false, false, false, true, false), c.columns().stream().map(ColumnDef::notNull).toList());
     }
 
     // ───── INSERT ─────
@@ -141,9 +154,9 @@ class ParserTest {
     @Test
     void selectErrors() {
         assertError("SELECT * users;", 1, 10, "FROM 필요");
-        assertError("SELECT FROM t;", 1, 8, "예약어 FROM");
-        assertError("SELECT order FROM t;", 1, 8, "예약어 ORDER는 칸 이름으로 쓸 수 없음");
-        assertError("SELECT * FROM desc;", 1, 15, "예약어 DESC는 테이블 이름으로");
+        assertError("SELECT FROM t;", 1, 8, "칸 목록 필요");
+        assertError("SELECT order FROM t;", 1, 8, "칸 이름으로 예약어를 쓸 수 없음: ORDER");
+        assertError("SELECT * FROM desc;", 1, 15, "테이블 이름으로 예약어를 쓸 수 없음: DESC");
         assertError("SELECT * FROM t ORDER age;", 1, 23, "BY 필요");
         assertError("SELECT * FROM t LIMIT 1 ORDER BY a;", 1, 25, "';' 필요"); // 순서는 ORDER BY → LIMIT
     }
@@ -234,9 +247,32 @@ class ParserTest {
         assertError("SELECT * FROM t WHERE a NOT = 1;", 1, 25, "NOT은 BETWEEN, IN, LIKE 앞에만");
         assertError("SELECT * FROM t WHERE a IS 1;", 1, 28, "NULL 필요");
         assertError("SELECT * FROM t WHERE (a = 1;", 1, 29, "')' 필요");
-        assertError("SELECT * FROM t WHERE a = 1 = 2;", 1, 29, "';' 필요"); // 비교 연쇄는 받지 않음
+        assertError("SELECT * FROM t WHERE a = 1 = 2;", 1, 29, "비교를 이어 쓸 수 없음"); // 비교 연쇄는 받지 않음
         assertError("SELECT * FROM t WHERE;", 1, 22, "값 필요");
         assertError("SELECT * FROM t WHERE a = ;", 1, 27, "값 필요");
+    }
+
+    @Test
+    void comparingAConditionIsAnError() {
+        assertError("SELECT * FROM t WHERE (a = 1) = TRUE;", 1, 31, "비교를 이어 쓸 수 없음");
+        assertError("SELECT * FROM t WHERE (a=1) = (b=2);", 1, 29, "비교를 이어 쓸 수 없음");
+        assertError("SELECT * FROM t WHERE a IS NULL = 1;", 1, 33, "비교를 이어 쓸 수 없음");
+        assertError("SELECT * FROM t WHERE a < b < c;", 1, 29, "비교를 이어 쓸 수 없음");
+        assertError("SELECT * FROM t WHERE NOT a = 1 = 2;", 1, 33, "비교를 이어 쓸 수 없음");
+    }
+
+    @Test
+    void nestingDepthIsLimited() {
+        String w = "SELECT * FROM t WHERE ";
+        assertEquals("a", where("(".repeat(Parser.MAX_DEPTH) + "a" + ")".repeat(Parser.MAX_DEPTH)));
+        assertEquals("NOT(".repeat(200) + "a" + ")".repeat(200), where("NOT ".repeat(200) + "a"));
+        // 201번째 '(' 또는 NOT 자리에서 에러 (StackOverflowError가 아니라 SqlException)
+        assertError(w + "(".repeat(201) + "a" + ")".repeat(201) + ";", 1, 23 + 200, "식이 너무 깊음");
+        assertError(w + "(".repeat(5000) + ";", 1, 23 + 200, "식이 너무 깊음");
+        assertError(w + "NOT ".repeat(20000) + "a;", 1, 23 + 200 * 4, "식이 너무 깊음");
+        assertError(w + "NOT (".repeat(101) + "a" + ")".repeat(101) + ";", 1, 23 + 100 * 5, "식이 너무 깊음");
+        // 옆으로 나란한 괄호는 깊이가 쌓이지 않음
+        assertEquals(301, where("(a=1) AND ".repeat(300) + "(b=1)").split("AND\\(", -1).length);
     }
 
     @Test

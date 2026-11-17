@@ -20,13 +20,17 @@ import minidb.sql.Ast.*;
  * 피연산자 := 값 | 칸 이름
  * </pre>
  * 괄호는 조건 자리에만 온다: `(a = 1) = TRUE`, `a IN ((b OR c))`는 에러.
+ * 비교 연쇄 `a = 1 = 2`는 에러. 괄호·NOT 중첩은 {@value #MAX_DEPTH}단계까지 (넘으면 재귀가 스택을 넘치기 전에 에러).
  * 비교가 NOT보다 먼저 묶인다 (MySQL과 같음): `NOT a = 1` → NOT(a = 1).
  * BETWEEN의 양 끝은 피연산자라서 `a BETWEEN 1 AND 5 AND b = 2`의 두 번째 AND는 논리 AND가 된다.
  */
 public final class Parser {
 
+    static final int MAX_DEPTH = 200;
+
     private final List<Token> ts;
     private int i = 0;
+    private int depth = 0;
 
     private Parser(List<Token> ts) {
         this.ts = ts;
@@ -83,16 +87,23 @@ public final class Parser {
             args.add((int) unsigned(Integer.MAX_VALUE, "글자 수"));
             expect(RPAREN, "')'");
         } else if (type == ColumnType.DECIMAL) {
-            expect(LPAREN, "DECIMAL 뒤 '('");
-            args.add((int) unsigned(Integer.MAX_VALUE, "전체 자릿수"));
-            expect(COMMA, "','");
-            args.add((int) unsigned(Integer.MAX_VALUE, "소수 자릿수"));
-            expect(RPAREN, "')'");
+            int precision = 10, scale = 0; // MySQL 기본: DECIMAL = DECIMAL(10,0), DECIMAL(p) = DECIMAL(p,0)
+            if (accept(LPAREN)) {
+                precision = (int) unsigned(Integer.MAX_VALUE, "전체 자릿수");
+                if (accept(COMMA)) scale = (int) unsigned(Integer.MAX_VALUE, "소수 자릿수");
+                expect(RPAREN, "')'");
+            }
+            args.add(precision);
+            args.add(scale);
+        } else if (peek().type() == LPAREN) {
+            throw new SqlException(peek(), typeTok.text() + "(n) 같은 표시 폭은 지원 안 함");
         }
         boolean notNull = false;
         if (acceptKeyword("NOT")) {
             keyword("NULL");
             notNull = true;
+        } else {
+            acceptKeyword("NULL"); // MySQL처럼 NULL 허용을 적어도 됨 (적지 않은 것과 같음)
         }
         return new ColumnDef(name, type, args, notNull);
     }
@@ -126,6 +137,7 @@ public final class Parser {
     private Select select() {
         next();
         List<Name> cols = new ArrayList<>();
+        if (peek().isKeyword("FROM")) throw new SqlException(peek(), "칸 목록 필요 (* 또는 칸 이름)");
         if (!accept(STAR)) {
             do {
                 cols.add(ident("칸 이름"));
@@ -185,13 +197,32 @@ public final class Parser {
     }
 
     private Expr not() {
-        if (acceptKeyword("NOT")) return new Not(not());
-        if (accept(LPAREN)) {
-            Expr e = or();
-            expect(RPAREN, "')'");
+        Token t = peek();
+        if (acceptKeyword("NOT")) {
+            enter(t);
+            Expr e = new Not(not());
+            depth--;
             return e;
         }
-        return predicate();
+        Expr e;
+        if (accept(LPAREN)) {
+            enter(t);
+            e = or();
+            expect(RPAREN, "')'");
+            depth--;
+        } else {
+            e = predicate();
+        }
+        Token after = peek();
+        if (compareOp(after) != null) {
+            throw new SqlException(after, "비교를 이어 쓸 수 없음 (조건은 다시 비교하지 않음, a < b < c 대신 a < b AND b < c)");
+        }
+        return e;
+    }
+
+    /** 에러로 끝나면 파싱 전체가 멈추므로 depth를 되돌릴 필요가 없다 */
+    private void enter(Token t) {
+        if (++depth > MAX_DEPTH) throw new SqlException(t, "식이 너무 깊음: 괄호·NOT 중첩은 " + MAX_DEPTH + "단계까지");
     }
 
     private Expr predicate() {
@@ -292,7 +323,7 @@ public final class Parser {
             next();
             return new Name(t.text(), t.line(), t.col());
         }
-        if (t.type() == KEYWORD) throw new SqlException(t, "예약어 " + t.text() + "는 " + what + "으로 쓸 수 없음");
+        if (t.type() == KEYWORD) throw new SqlException(t, what + "으로 예약어를 쓸 수 없음: " + t.text());
         throw new SqlException(t, what + " 필요, 받은 것: " + describe(t));
     }
 
