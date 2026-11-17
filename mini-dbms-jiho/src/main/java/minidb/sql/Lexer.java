@@ -40,7 +40,7 @@ public final class Lexer {
                 return;
             }
             int startLine = line, startCol = col;
-            char c = peek(0);
+            int c = peek(0);
             if (Character.isLetter(c) || c == '_') {
                 word(startLine, startCol);
             } else if (isDigit(c) || (c == '.' && isDigit(peek(1)))) {
@@ -55,10 +55,10 @@ public final class Lexer {
 
     private void skipSpacesAndComments() {
         while (pos < src.length()) {
-            char c = peek(0);
-            if (Character.isWhitespace(c)) {
+            int c = peek(0);
+            if (isSpace(c)) {
                 advance();
-            } else if (c == '-' && peek(1) == '-' && (pos + 2 >= src.length() || Character.isWhitespace(peek(2)))) {
+            } else if (c == '-' && peek(1) == '-' && (pos + 2 >= src.length() || isSpace(peek(2)))) {
                 // MySQL처럼 "-- " (뒤에 공백)만 주석. "--1"은 MINUS MINUS 1
                 while (pos < src.length() && peek(0) != '\n') advance();
             } else {
@@ -91,7 +91,7 @@ public final class Lexer {
             throw new SqlException(l, c, "숫자 뒤의 '.': " + src.substring(start, pos + 1));
         }
         if (pos < src.length() && (Character.isLetter(peek(0)) || peek(0) == '_')) {
-            throw new SqlException(l, c, "숫자 뒤에 글자가 붙어 있음: " + src.substring(start, pos + 1));
+            throw new SqlException(l, c, "숫자 뒤에 글자가 붙어 있음: " + src.substring(start, pos + Character.charCount(peek(0))));
         }
         out.add(new Token(TokenType.NUMBER, src.substring(start, pos), l, c));
     }
@@ -103,7 +103,7 @@ public final class Lexer {
             if (pos >= src.length()) {
                 throw new SqlException(l, c, "닫히지 않은 따옴표");
             }
-            char ch = peek(0);
+            int ch = peek(0);
             if (ch == '\'') {
                 if (peek(1) == '\'') { // '' 는 따옴표 하나 (SQL 표준)
                     sb.append('\'');
@@ -114,15 +114,15 @@ public final class Lexer {
                 advance(); // 닫는 '
                 break;
             }
-            sb.append(ch);
+            sb.appendCodePoint(ch);
             advance();
         }
         out.add(new Token(TokenType.STRING, sb.toString(), l, c));
     }
 
     private void symbol(int l, int c) {
-        char ch = peek(0);
-        char next = peek(1);
+        int ch = peek(0);
+        int next = peek(1);
         TokenType t;
         int len = 1;
         switch (ch) {
@@ -147,29 +147,39 @@ public final class Lexer {
                 t = TokenType.NE;
                 len = 2;
             }
-            default -> throw new SqlException(l, c, "모르는 글자: '" + ch + "'");
+            default -> throw new SqlException(l, c, ch < 128
+                    ? "모르는 글자: '" + (char) ch + "'"
+                    : String.format("모르는 글자: U+%04X", ch)); // 비ASCII는 보이지 않거나 반쪽으로 찍힐 수 있어 코드 번호로
         }
         String text = src.substring(pos, pos + len);
         for (int i = 0; i < len; i++) advance();
         out.add(new Token(t, text, l, c));
     }
 
-    private char peek(int ahead) {
+    /** 현재 위치(+ahead 글자)의 코드 포인트. 끝이면 0. ahead>0은 ASCII 바로 뒤에서만 씀 */
+    private int peek(int ahead) {
         int i = pos + ahead;
-        return i < src.length() ? src.charAt(i) : '\0';
+        return i < src.length() ? src.codePointAt(i) : 0;
     }
 
+    /** 코드 포인트 하나(서로게이트 쌍이면 2 char)를 한 칸으로 셈 */
     private void advance() {
-        if (src.charAt(pos) == '\n') {
+        int cp = src.codePointAt(pos);
+        if (cp == '\n') {
             line++;
             col = 1;
         } else {
             col++;
         }
-        pos++;
+        pos += Character.charCount(cp);
     }
 
-    private static boolean isDigit(char c) {
+    /** NBSP는 Character.isWhitespace가 거부하지만 복사·붙여넣기로 자주 섞여 들어오므로 공백으로 받음 */
+    private static boolean isSpace(int c) {
+        return Character.isWhitespace(c) || c == '\u00A0';
+    }
+
+    private static boolean isDigit(int c) {
         return c >= '0' && c <= '9';
     }
 }

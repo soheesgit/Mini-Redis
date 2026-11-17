@@ -130,6 +130,21 @@ class LexerTest {
         assertEquals(List.of(MINUS, MINUS, NUMBER, EOF), types("--1")); // MySQL처럼 공백 없는 --는 주석 아님
     }
 
+    private static Token tokenAt(String sql, int index) {
+        return Lexer.tokenize(sql).get(index);
+    }
+
+    private static void assertPos(Token t, int line, int col) {
+        assertEquals(line + ":" + col, t.line() + ":" + t.col(), t.toString());
+    }
+
+    private static void assertError(String sql, int line, int col, String messagePart) {
+        SqlException e = assertThrows(SqlException.class, () -> Lexer.tokenize(sql), sql);
+        assertEquals(line + ":" + col, e.line() + ":" + e.col(), e.getMessage());
+        assertTrue(e.getMessage().startsWith(line + ":" + col + ": "), e.getMessage());
+        assertTrue(e.getMessage().contains(messagePart), e.getMessage());
+    }
+
     @Test
     void positionsAreLineAndColumn() {
         List<Token> ts = Lexer.tokenize("SELECT *\n  FROM t");
@@ -138,23 +153,98 @@ class LexerTest {
     }
 
     @Test
+    void positionAfterStringWithNewline() {
+        List<Token> ts = Lexer.tokenize("'a\nb' x");
+        assertEquals("a\nb", ts.get(0).text()); // 줄바꿈이 든 문자열 값이 그대로 보존됨
+        assertPos(ts.get(0), 1, 1);
+        assertPos(ts.get(1), 2, 4);
+    }
+
+    @Test
+    void tabCountsAsOneColumn() {
+        assertPos(tokenAt("\tx", 0), 1, 2);
+    }
+
+    @Test
+    void crlfIsOneLineBreak() {
+        assertPos(tokenAt("a\r\nb", 1), 2, 1);
+        assertPos(tokenAt("SELECT\r\n\r\n  *", 1), 3, 3);
+    }
+
+    @Test
+    void positionAfterTwoCharacterOperator() {
+        assertPos(tokenAt("<= x", 1), 1, 4);
+        assertPos(tokenAt("a<>b", 2), 1, 4);
+        assertPos(tokenAt("a!=b", 2), 1, 4);
+    }
+
+    @Test
+    void eofPosition() {
+        assertPos(tokenAt("", 0), 1, 1);
+        assertPos(tokenAt("SELECT *\nFROM", 3), 2, 5);
+        assertPos(tokenAt("a\n", 1), 2, 1);
+    }
+
+    @Test
+    void columnsCountCodePointsNotUtf16Units() {
+        assertPos(tokenAt("'\uD83D\uDE00' x", 1), 1, 5); // 😀 는 한 칸
+        assertPos(tokenAt("\uD835\uDC00b", 0), 1, 1); // 𝐀(수학 굵은 A)는 글자라서 IDENT
+        assertEquals("\uD83D\uDE00", tokenAt("'\uD83D\uDE00'", 0).text());
+    }
+
+    @Test
+    void unknownNonAsciiCharacterShowsCodePoint() {
+        assertError("a \uD83D\uDE00 b", 1, 3, "U+1F600");
+        assertError("x\n\u200B", 2, 1, "U+200B"); // 안 보이는 글자
+        assertError("\u201Cabc\u201D", 1, 1, "U+201C"); // 스마트 따옴표
+    }
+
+    @Test
+    void nbspIsWhitespace() {
+        List<Token> ts = Lexer.tokenize("SELECT\u00A0*");
+        assertEquals(List.of(KEYWORD, STAR, EOF), ts.stream().map(Token::type).toList());
+        assertPos(ts.get(1), 1, 8);
+    }
+
+    @Test
     void unclosedQuoteReportsWhereItOpened() {
         SqlException e = assertThrows(SqlException.class, () -> Lexer.tokenize("SELECT *\nWHERE name = 'kim"));
         assertTrue(e.getMessage().startsWith("2:14:"), e.getMessage());
         assertTrue(e.getMessage().contains("닫히지 않은 따옴표"));
+        assertEquals(2, e.line());
+        assertEquals(14, e.col());
     }
 
     @Test
     void unknownCharacterReportsPosition() {
-        SqlException e = assertThrows(SqlException.class, () -> Lexer.tokenize("SELECT # FROM t"));
-        assertTrue(e.getMessage().startsWith("1:8:"), e.getMessage());
-        assertThrows(SqlException.class, () -> Lexer.tokenize("a ! b"));
-        assertThrows(SqlException.class, () -> Lexer.tokenize("\"double\""));
+        assertError("SELECT # FROM t", 1, 8, "모르는 글자: '#'");
+        assertError("a ! b", 1, 3, "모르는 글자: '!'");
+        assertError("\"double\"", 1, 1, "모르는 글자: '\"'");
+        assertError("SELECT *\n  # x", 2, 3, "모르는 글자: '#'"); // 두 번째 줄
     }
 
     @Test
     void numberGluedToLettersIsAnError() {
-        assertThrows(SqlException.class, () -> Lexer.tokenize("12abc"));
+        assertError("12abc", 1, 1, "숫자 뒤에 글자");
+        assertError("x\n  12abc", 2, 3, "숫자 뒤에 글자");
+    }
+
+    @Test
+    void sqlExceptionCarriesPosition() {
+        SqlException withPos = new SqlException(3, 7, "boom");
+        assertEquals("3:7: boom", withPos.getMessage());
+        assertEquals(3, withPos.line());
+        assertEquals(7, withPos.col());
+
+        SqlException fromToken = new SqlException(new Token(IDENT, "x", 4, 2), "boom");
+        assertEquals("4:2: boom", fromToken.getMessage());
+        assertEquals(4, fromToken.line());
+        assertEquals(2, fromToken.col());
+
+        SqlException noPos = new SqlException("boom");
+        assertEquals("boom", noPos.getMessage());
+        assertEquals(0, noPos.line());
+        assertEquals(0, noPos.col());
     }
 
     @Test
