@@ -38,12 +38,18 @@ DELETE FROM users WHERE age < 20;
 - 테이블은 `CREATE TABLE`로 정의한다 [확정]. 스키마는 그 테이블 파일의 0번 메타 페이지에 저장 (1.4)
 - 키워드는 대소문자 무관 (`select`, `TRUE`, `null` 모두 같음)
 - 문자열 이스케이프는 `''`만, `\`는 일반 글자 (ANSI 방식, MySQL 기본과 다름)
-- 식별자는 대소문자 무관으로 비교하고 쓴 모양은 보존, 테이블 파일 이름은 소문자 (MySQL 칸 이름과 같음)
+- 식별자는 대소문자 무관으로 비교하고 쓴 모양은 보존, 테이블 파일 이름은 소문자 (MySQL 칸 이름과 같음). 대소문자를 맞추는 글자는 **ASCII A-Z뿐**이다: 켈빈 기호 K(U+212A)·Ω(U+2126)·ı·ſ를 k·ω·i·s로 바꾸면 다른 이름이 같은 파일로 합쳐지기 때문
+- 모든 문장은 `;`로 끝난다 (MySQL CLI와 같음). 빈 문장(`;;`, `;`만)은 에러
+- INSERT 칸 목록(`INSERT INTO t (a, b)`)은 없다: 값은 id를 뺀 모든 칸 순서대로
+- UPDATE `SET` 값은 리터럴만 (`age = age + 1` 같은 계산식 없음)
+- 비교 연쇄(`a = 1 = 2`, `a < b < c`)는 에러. 비교·BETWEEN·IN·LIKE·IS의 피연산자는 **값이나 칸만**이고, 괄호는 조건을 묶을 때만 쓴다 (`(a = 1) = TRUE`, `a IN ((b OR c))`는 에러)
+- 괄호·NOT 중첩은 200단계까지. 넘으면 문법 에러 (재귀 파서가 스택을 넘쳐 서버 워커가 죽지 않게)
+- 칸 정의: `NULL`을 적어도 된다(적지 않은 것과 같음). `DECIMAL`은 `DECIMAL(10,0)`, `DECIMAL(p)`는 `DECIMAL(p,0)` (MySQL 기본값). `INT(11)` 같은 표시 폭은 지원하지 않음
 - 같지 않음은 `<>`와 `!=` 둘 다 받는다 (MySQL도 둘 다 지원)
 - WHERE가 없는 UPDATE · DELETE는 전체 행에 적용 (MySQL과 같음)
 - **id 칸 [확정]**: 모든 테이블 맨 앞에 `id INT`가 자동으로 붙는다. `CREATE TABLE`에 적지 않고, INSERT `VALUES`에서도 뺀다. 값은 nextId로 자동 부여. `SELECT *`에는 나온다. 수정(`SET id = ...`)은 거부
 - **칸별 `NOT NULL` [확정]**: 지원 (`CREATE TABLE t (name VARCHAR(20) NOT NULL, ...)`). id는 항상 NOT NULL
-- **WHERE 범위 [확정: 전부]**: 비교(`= <> != < <= > >=`), `AND OR NOT`, 괄호, `BETWEEN`, `IN`, `LIKE`(`%`, `_`), `IS [NOT] NULL`. 우선순위는 MySQL과 같이 `NOT` > `AND` > `OR`
+- **WHERE 범위 [확정: 전부]**: 비교(`= <> != < <= > >=`), `AND OR NOT`, 괄호, `BETWEEN`, `IN`, `LIKE`(`%`, `_`), `IS [NOT] NULL`. 우선순위는 MySQL과 같이 비교 > `NOT` > `AND` > `OR` (`NOT a = 1`은 `NOT (a = 1)`)
 - **`ORDER BY`, `LIMIT` [확정: 지원]**: 결과를 메모리에서 정렬하고 자른다
 
 ### 1.2 처리 흐름
