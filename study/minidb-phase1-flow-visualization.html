@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>미니 DBMS 1단계 흐름</title>
+<script>
+  // 저장된 테마를 그리기 전에 적용 (깜빡임 방지)
+  try { const t = localStorage.getItem('sv-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+  /* ===== 토큰 (style-guide.md 2·3장) — 페이지마다 바꾸지 않는다 ===== */
+  :root{
+    color-scheme: dark;
+    --bg:#0f1115; --surface:#171a21; --surface-2:#1f232c; --border:#2c313c;
+    --text:#e8eaef; --text-2:#aab1be; --text-3:#8a92a1;
+    --accent:#8b9bff; --on-accent:#0b0d12;
+    --role-a:#38bdf8; --role-b:#34d399; --data:#fbbf24; --warn:#f87171;
+    --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5; --border:#dde1e7;
+    --text:#1a1d23; --text-2:#4b5260; --text-3:#5c6370;
+    --accent:#4338ca; --on-accent:#ffffff;
+    --role-a:#075985; --role-b:#065f46; --data:#854d0e; --warn:#b91c1c;
+  }
+
+  /* ===== 기본 ===== */
+  *,*::before,*::after{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:400 15px/1.65 var(--font);
+    word-break:keep-all; overflow-wrap:anywhere;
+    transition:background .2s,color .2s;
+  }
+  a{color:var(--accent);}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 16px;}
+  section{margin:56px 0;}
+  h1,h2,h3{line-height:1.3;margin:0;}
+  h1{font-size:32px;letter-spacing:-.01em;margin:8px 0 12px;}
+  h2{font-size:24px;margin-bottom:8px;}
+  h3{font-size:17px;margin-bottom:8px;}
+  p{margin:0 0 12px;}
+  .kicker{font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--accent);}
+  .lead{font-size:17px;color:var(--text-2);max-width:68ch;}
+  .sec-desc{color:var(--text-2);max-width:68ch;margin-bottom:20px;}
+  .muted{color:var(--text-3);}
+  .small{font-size:13px;}
+  b,strong{font-weight:700;}
+
+  /* ===== 상단 바 + 테마 토글 ===== */
+  .topbar{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;}
+  .topbar-title{font-size:13px;font-weight:700;color:var(--text-2);min-width:0;}
+
+  /* ===== 레이아웃 ===== */
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+  .grid>*,.row>*{min-width:0;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0;}
+  .card>:last-child{margin-bottom:0;}
+
+  /* ===== 칩 · 콜아웃 ===== */
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;line-height:1.5;padding:2px 10px;border-radius:999px;white-space:nowrap;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);}
+  .chip.a{color:var(--role-a);background:color-mix(in srgb,var(--role-a) 14%,transparent);border-color:color-mix(in srgb,var(--role-a) 35%,transparent);}
+  .chip.b{color:var(--role-b);background:color-mix(in srgb,var(--role-b) 14%,transparent);border-color:color-mix(in srgb,var(--role-b) 35%,transparent);}
+  .chip.data{color:var(--data);background:color-mix(in srgb,var(--data) 14%,transparent);border-color:color-mix(in srgb,var(--data) 35%,transparent);}
+  .chip.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent);border-color:color-mix(in srgb,var(--warn) 35%,transparent);}
+  .callout{border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:14px 16px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));}
+  .callout.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--surface));}
+
+  /* ===== 코드 · 표 ===== */
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:1px 6px;}
+  pre.code{margin:0;padding:12px 0;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font:13px/1.7 var(--mono);}
+  pre.code .ln{display:block;padding:0 16px 0 28px;text-indent:-12px;white-space:pre-wrap;border-left:3px solid transparent;}
+  pre.code .ln.hl{background:color-mix(in srgb,var(--data) 16%,transparent);border-left-color:var(--data);}
+  pre.code .cm{color:var(--text-3);}
+  .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px;}
+  table{border-collapse:collapse;width:100%;font-size:15px;}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top;}
+  th{font-size:13px;color:var(--text-3);background:var(--surface-2);}
+  tr:last-child td{border-bottom:0;}
+
+  /* ===== 버튼 · 진행 바 ===== */
+  button{font:inherit;font-size:14px;font-weight:600;line-height:1.4;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;cursor:pointer;transition:border-color .2s,background .2s;}
+  button:hover:not(:disabled){border-color:var(--text-3);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
+  button.ghost{background:transparent;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .progress{height:4px;background:var(--surface-2);border-radius:999px;overflow:hidden;}
+  .progress>i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s;}
+
+  /* ===== 단계형 설명 ===== */
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .step-count{font-size:13px;color:var(--text-3);font-variant-numeric:tabular-nums;margin-left:auto;}
+  .phases{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0;}
+  .phases button{font-size:13px;padding:4px 12px;border-radius:999px;}
+  .phases button.on{border-color:var(--accent);color:var(--accent);}
+  .explain{display:grid;grid-template-columns:72px 1fr;gap:8px 12px;margin:16px 0;}
+  .explain dt{font-size:13px;font-weight:700;color:var(--text-3);padding-top:2px;}
+  .explain dd{margin:0;}
+  .explain dt.ifnot{color:var(--warn);}
+  @media (max-width:520px){ .explain{grid-template-columns:1fr;gap:2px;} .explain dd{margin-bottom:10px;} }
+  .changed{animation:flash .8s ease;}
+  @keyframes flash{0%{box-shadow:0 0 0 3px var(--data);}100%{box-shadow:0 0 0 0 transparent;}}
+
+  /* ===== 확인 질문 ===== */
+  details.quiz{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;}
+  details.quiz+details.quiz{margin-top:8px;}
+  details.quiz summary{cursor:pointer;font-weight:600;}
+  details.quiz[open] summary{margin-bottom:8px;}
+  .summary-list{margin:0;padding-left:20px;}
+  .summary-list li+li{margin-top:6px;}
+  footer{border-top:1px solid var(--border);padding:24px 0 48px;color:var(--text-3);font-size:13px;}
+
+  @media (prefers-reduced-motion: reduce){ *{animation:none !important;transition:none !important;} }
+
+  /* ===== 페이지 전용 ===== */
+  .empty{color:var(--text-3);}
+  .mono{font-family:var(--mono);}
+  .qa .q{font-size:17px;font-weight:700;margin-bottom:8px;}
+  .stack{display:grid;gap:16px;}
+  .stack>*{min-width:0;}
+
+  /* 큰 그림 흐름도 */
+  .big{display:flex;align-items:stretch;gap:8px;}
+  .big-node{flex:1 1 0;min-width:0;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;}
+  .big-node .t{font-weight:700;}
+  .big-node .d{font-size:13px;color:var(--text-2);margin-top:4px;}
+  .big-node.in .t{color:var(--role-a);}
+  .big-node.out .t{color:var(--role-b);}
+  .big-arrow{flex:0 0 auto;align-self:center;color:var(--text-3);font-weight:700;}
+  .big-arrow::before{content:"→";}
+  @media (max-width:760px){ .big{flex-direction:column;} .big-arrow::before{content:"↓";} }
+
+  /* 시뮬레이터: 흐름 지도 */
+  .panel{padding:16px;}
+  .panel-title{font-size:13px;font-weight:700;color:var(--text-3);margin-bottom:8px;}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .fnode{font-size:13px;font-weight:700;padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);white-space:nowrap;}
+  .fnode.on{color:var(--data);border-color:var(--data);background:color-mix(in srgb,var(--data) 14%,transparent);}
+  .farrow{color:var(--text-3);font-weight:700;}
+  .sqlnow{font:15px/1.6 var(--mono);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;}
+  .two{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));}
+  .two>*{min-width:0;}
+
+  /* 토큰 · AST */
+  .toks{display:flex;flex-wrap:wrap;gap:8px;}
+  .tok{display:inline-flex;flex-direction:column;align-items:center;min-width:0;border:1px solid var(--border);border-radius:8px;padding:4px 8px;background:var(--surface-2);}
+  .tok b{font:700 15px/1.4 var(--mono);}
+  .tok span{font-size:13px;line-height:1.4;color:var(--text-3);}
+  .tok.KEYWORD b{color:var(--role-a);}
+  .tok.STRING b,.tok.NUMBER b{color:var(--data);}
+  .tok.EOF{border-style:dashed;}
+  .tree,.tree ul{list-style:none;margin:0;padding:0;}
+  .tree ul{margin-left:8px;padding-left:16px;border-left:1px solid var(--border);}
+  .tree li{padding:4px 0 0;}
+  .tree .nd{display:inline-block;font:13px/1.5 var(--mono);border:1px solid var(--border);border-radius:8px;padding:2px 8px;background:var(--surface-2);}
+  .tree .nd.root{color:var(--role-a);font-weight:700;}
+  .tree .nd.leaf{color:var(--data);}
+
+  /* 행 값 · 바이트 */
+  .notes{margin:8px 0 0;padding-left:20px;font-size:13px;color:var(--text-2);}
+  .bytes{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;}
+  .bgroup{min-width:0;}
+  .bcells{display:flex;flex-wrap:wrap;gap:4px;}
+  .bcell{font:700 13px/1 var(--mono);min-width:28px;text-align:center;padding:8px 4px;border:1px solid color-mix(in srgb,var(--role-b) 45%,var(--border));border-radius:8px;background:var(--surface-2);}
+  .blabel{font-size:13px;color:var(--text-3);margin-top:4px;}
+
+  /* 8KB 페이지 */
+  .pg{display:flex;flex-wrap:wrap;gap:4px;align-items:stretch;}
+  .seg{flex:0 0 auto;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px;line-height:1.5;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface-2);}
+  .seg b{white-space:nowrap;}
+  .seg .r{font-family:var(--mono);color:var(--text-2);}
+  .seg.slot{border-color:color-mix(in srgb,var(--role-a) 55%,transparent);}
+  .seg.slot b{color:var(--role-a);}
+  .seg.row{border-color:color-mix(in srgb,var(--role-b) 55%,transparent);}
+  .seg.row b{color:var(--role-b);}
+  .seg.dead,.seg.del{border-style:dashed;border-color:color-mix(in srgb,var(--warn) 55%,transparent);}
+  .seg.dead b,.seg.del b{color:var(--warn);}
+  .seg.free{flex:1 1 200px;border-style:dashed;background:transparent;}
+  .seg.free .ends{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--data);font-family:var(--mono);}
+  @media (max-width:760px){ .pg{flex-direction:column;} .seg,.seg.free{flex:0 0 auto;} }
+  .stats{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+  .stat{border:1px solid var(--border);border-radius:8px;padding:4px 12px;background:var(--surface-2);font-size:13px;color:var(--text-3);}
+  .stat b{display:block;font:700 15px/1.4 var(--mono);color:var(--text);}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .stage table{font-size:13px;}
+  .stage td{font-family:var(--mono);}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <span class="topbar-title">StudyVisualization · 미니 DBMS</span>
+    <button id="themeBtn" class="ghost" type="button"></button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <div class="kicker">미니 DBMS · Phase 1</div>
+    <h1>SQL 한 줄이 파일의 바이트가 되기까지</h1>
+    <p class="lead">글자로 된 SQL 한 줄이 렉서, 파서, 값 검사, 행 인코딩, 페이지를 거쳐 파일의 바이트가 되고, 다시 읽혀 나오는 과정을 한 단계씩 따라간다. 목표는 60분 안에 이 흐름을 머릿속에 그릴 수 있게 되는 것이다.</p>
+    <div class="row" style="margin:16px 0">
+      <span class="chip a">슬롯 · 키워드</span><span class="chip b">행 바이트</span><span class="chip data">지금 바뀐 것</span><span class="chip warn">삭제 · 죽은 공간</span>
+    </div>
+    <h3>따라갈 예시 입력</h3>
+    <pre class="code"><span class="ln">CREATE TABLE users (name VARCHAR(20), age INT);   <span class="cm">-- id INT 칸은 맨 앞에 자동으로 붙는다</span></span><span class="ln">INSERT INTO users VALUES ('kim', 20);             <span class="cm">-- id는 적지 않는다. nextId가 정한다</span></span><span class="ln">SELECT * FROM users WHERE age &gt;= 20;</span><span class="ln">UPDATE users SET name = 'kimchi' WHERE id = 1;</span><span class="ln">DELETE FROM users WHERE id = 1;</span></pre>
+    <div class="callout" style="margin-top:16px">
+      <b>아래 Java 코드는 학습용 축소판이다.</b> INT · VARCHAR만 다루고, checksum은 자리만 있다. 렉서는 #22에 실제 코드(<code>minidb/sql/Lexer.java</code>)가 있고 나머지는 구현 전이다. 실제 코드는 이 페이지와 다를 수 있다.
+    </div>
+  </section>
+
+  <section>
+    <h2>60분 계획</h2>
+    <p class="sec-desc">★가 많을수록 깊게 본다. 근거는 "틀리면 얼마나 크게 깨지나"와 "설계의 핵심인가"다.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>시간(분)</th><th>볼 것</th><th>깊이</th><th>왜 이만큼</th></tr>
+        <tr><td class="mono">0~5</td><td>흐름 지도</td><td>★</td><td>전체 순서만 잡는다</td></tr>
+        <tr><td class="mono">5~13</td><td>렉서</td><td>★★</td><td>두 글자 연산자, 따옴표에서 실수가 난다</td></tr>
+        <tr><td class="mono">13~23</td><td>파서</td><td>★★</td><td>재귀 하강, 에러 위치 알려 주기</td></tr>
+        <tr><td class="mono">23~30</td><td>값 검사 · id</td><td>★</td><td>규칙을 순서대로 대조할 뿐이다</td></tr>
+        <tr><td class="mono">30~42</td><td>행 인코딩</td><td>★★★</td><td>바이트 하나가 틀리면 뒤 칸이 전부 밀린다. 14바이트를 직접 센다</td></tr>
+        <tr><td class="mono">42~52</td><td>페이지 · 슬롯 INSERT</td><td>★★★</td><td>설계의 핵심. 양 끝에서 채우는 이유</td></tr>
+        <tr><td class="mono">52~56</td><td>SELECT · WHERE</td><td>★</td><td>INSERT를 거꾸로 하면 된다</td></tr>
+        <tr><td class="mono">56~60</td><td>UPDATE · DELETE + 확인 질문</td><td>★★</td><td>슬롯 번호가 유지되는 것만 확인</td></tr>
+      </table>
+    </div>
+    <p class="small muted" style="margin-top:12px"><b>건너뛰어도 되는 것:</b> 타입 10종의 세부(DECIMAL, TIMESTAMP 등), checksum 계산법, 메타 페이지의 바이트 배치, WAL(설계 1.12, 쓰기 순서와 복구).</p>
+  </section>
+
+  <section>
+    <h2>왜 필요할까</h2>
+    <p class="sec-desc">SQL은 사람이 읽는 <b>글자</b>다. 파일에 들어가는 것은 <b>바이트</b>다. 글자를 그대로 파일에 적으면 "id가 1인 행"을 찾을 때마다 모든 글자를 다시 해석해야 하고, 행 하나를 고치면 뒤 내용이 전부 밀린다. 그래서 글자를 뜻이 정해진 바이트로 바꾸고, 8KB짜리 페이지 안의 정해진 자리에 넣는다.</p>
+    <div class="card">
+      <div class="big">
+        <div class="big-node in"><div class="t">SQL 문자열</div><div class="d">사용자가 보낸 글자</div></div><div class="big-arrow"></div>
+        <div class="big-node"><div class="t">토큰 목록</div><div class="d">렉서가 단어로 자름</div></div><div class="big-arrow"></div>
+        <div class="big-node"><div class="t">AST</div><div class="d">파서가 구조로 만듦</div></div><div class="big-arrow"></div>
+        <div class="big-node"><div class="t">행 바이트</div><div class="d">실행기가 검사하고 인코딩</div></div><div class="big-arrow"></div>
+        <div class="big-node out"><div class="t">페이지 → 파일</div><div class="d">슬롯에 위치를 적고 8KB를 씀</div></div>
+      </div>
+      <p class="small muted" style="margin-top:12px">전부 DBMS 프로그램(유저 영역의 Java 코드)이 한다. 커널은 마지막에 파일을 읽고 쓸 때만 불린다.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>창고로 비유하면</h2>
+    <p class="sec-desc">주문서(SQL)를 받아 상자(행)를 선반(페이지)에 넣는 창고다.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>이름</th><th>비유</th><th>실제</th></tr>
+        <tr><td>렉서</td><td>주문서의 글자를 단어 단위로 끊어 읽는다</td><td>문자열 → 토큰 목록. 문법은 안 본다</td></tr>
+        <tr><td>파서</td><td>단어 순서가 주문서 양식에 맞는지 보고 항목별로 정리한다</td><td>토큰 목록 → AST. 문법 에러를 잡는다</td></tr>
+        <tr><td>값 검사</td><td>정리한 내용이 창고 규칙(물건 종류, 크기)에 맞는지 본다</td><td>AST를 스키마와 대조. 개수 · 타입 · 글자 수</td></tr>
+        <tr><td>행 인코딩</td><td>물건을 정해진 순서대로 상자에 담는다</td><td>값 → 바이트 배열 (스키마 순서)</td></tr>
+        <tr><td>페이지</td><td>크기가 정해진 선반 하나</td><td>파일을 8192바이트씩 나눈 한 칸</td></tr>
+        <tr><td>슬롯</td><td>선반 앞쪽의 번호표 목록. "0번 상자는 여기서부터 이만큼"</td><td>(offset, length) 4바이트. 번호는 안 바뀐다</td></tr>
+        <tr><td>삭제</td><td>번호표에 "없음"이라고만 적는다. 상자는 그대로 둔다</td><td>slot.offset = 0. 행 바이트는 죽은 공간</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>등장하는 것들</h2>
+    <div class="grid">
+      <div class="card"><h3>토큰 <span class="chip a">일렬</span></h3><p>렉서가 자른 단어 하나. 종류(KEYWORD, IDENT, NUMBER, STRING, 기호)와 글자를 가진다. 토큰 목록은 <b>한 줄로 늘어선 배열</b>이다. 누가 테이블 이름이고 누가 값인지는 아직 모른다.</p></div>
+      <div class="card"><h3>AST <span class="chip a">트리</span></h3><p>추상 구문 트리. 문장의 뜻을 <b>부모-자식 구조</b>로 담는다. 괄호 · 쉼표 · 세미콜론은 구조를 알려 주는 역할을 끝냈으므로 AST에는 없다.</p></div>
+      <div class="card"><h3>스키마</h3><p>테이블의 칸 이름과 타입 목록. 여기서는 <code>id INT, name VARCHAR(20), age INT</code>. 테이블 파일의 0번 메타 페이지에 저장된다. 행 바이트에는 칸 이름이 없어서, 스키마 없이는 읽을 수 없다.</p></div>
+      <div class="card"><h3>행 바이트 <span class="chip b">14B</span></h3><p>행 하나를 바이트로 바꾼 것. <code>[NULL 비트맵][칸0][칸1][칸2]</code> 순서다. 숫자는 빅엔디언(큰 자리 바이트가 앞)으로 쓴다.</p></div>
+      <div class="card"><h3>데이터 페이지 <span class="chip">8192B</span></h3><p>헤더 16바이트(0~15), 그 뒤로 슬롯이 <b>앞에서 뒤로</b>, 행이 <b>맨 뒤에서 앞으로</b> 채워진다. <code>free_start</code>는 다음 슬롯 자리, <code>free_end</code>는 마지막에 쓴 행의 시작이다.</p></div>
+      <div class="card"><h3>nextId</h3><p>다음 행에 줄 id. 실행기가 메모리에 들고 있다. 파일 쓰기가 성공한 뒤에만 1 올린다.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>단계별로 따라가기</h2>
+    <p class="sec-desc">위쪽에서 설명과 코드를 읽고, 아래 그림에서 무엇이 바뀌었는지 본다. 노란 테두리가 잠깐 켜지는 칸이 이번 단계에 바뀐 칸이다. ← → 키로도 넘길 수 있다.</p>
+    <div class="card">
+      <div class="controls">
+        <button id="btnFirst" type="button">⏮ 처음</button>
+        <button id="btnPrev" type="button">◀ 이전</button>
+        <button id="btnPlay" type="button" class="primary">▶ 자동재생</button>
+        <button id="btnNext" type="button">다음 ▶</button>
+        <span class="step-count" id="stepCount"></span>
+      </div>
+      <div class="progress" style="margin-top:12px"><i id="progressBar"></i></div>
+      <div class="phases" id="phases"></div>
+      <h3 id="stepTitle" style="margin-top:16px"></h3>
+      <dl class="explain" id="explain"></dl>
+      <pre class="code" id="stepCode"></pre>
+    </div>
+    <div id="stage" class="stage" style="margin-top:16px"><!-- 시각화 영역 --></div>
+  </section>
+
+  <section>
+    <h2>헷갈리는 점 · 예상 질문</h2>
+    <div class="grid" style="grid-template-columns:1fr">
+      <div class="card qa"><div class="q">왜 슬롯은 앞, 행은 뒤에서 채울까?</div>
+        <p>슬롯표와 행이 각각 얼마나 커질지 미리 알 수 없기 때문이다. 양 끝에서 마주 보며 채우면 가운데 빈 공간을 경계 없이 다 쓴다. 둘 다 앞에서 채우면 슬롯 자리를 미리 정해야 해서, 남거나 모자란다.</p></div>
+      <div class="card qa"><div class="q">삭제할 때 왜 슬롯을 빼지 않을까?</div>
+        <p>슬롯을 빼면 뒤 슬롯의 번호가 하나씩 당겨진다. Phase 2의 인덱스는 행 위치를 (페이지, 슬롯 번호)로 기억하므로, 번호가 바뀌면 인덱스가 엉뚱한 행을 가리킨다. 그래서 <code>offset = 0</code>으로 표시만 한다.</p></div>
+      <div class="card qa"><div class="q">렉서와 파서를 왜 나눌까?</div>
+        <p>하는 일과 잡는 에러가 다르다. 렉서는 글자 수준(닫히지 않은 따옴표, 모르는 글자), 파서는 순서 수준(FROM 누락, <code>;</code> 누락)을 본다. 나누면 파서는 공백 · 대소문자 · 따옴표를 신경 쓰지 않고 토큰 종류만 대조하면 된다.</p></div>
+      <div class="card qa"><div class="q">nextId를 왜 쓰기 성공 뒤에 올릴까?</div>
+        <p>쓰기가 실패했는데 nextId가 이미 올라가 있으면, 파일에 없는 행이 그 id를 차지한 셈이 된다. "성공한 것만 반영한다"는 순서를 지키려고 맨 마지막에 올린다. 인덱스 등록(Phase 2)도 같은 이유로 파일에 쓴 뒤에 한다.</p></div>
+      <div class="card qa"><div class="q">UPDATE로 행이 길어지면?</div>
+        <p>세 경우로 나뉜다 (설계 1.9).</p>
+        <div class="table-wrap"><table>
+          <tr><th>조건</th><th>하는 일</th><th>슬롯</th></tr>
+          <tr><td>새 길이 ≤ 예전 길이</td><td>제자리에 덮어쓴다</td><td>length만 바뀜</td></tr>
+          <tr><td>같은 페이지 빈 공간 ≥ 새 길이</td><td>free_end 쪽에 새로 쓴다. 예전 바이트는 죽은 공간</td><td>번호 유지, offset만 바뀜</td></tr>
+          <tr><td>둘 다 아님</td><td>다른 페이지로 옮긴다 [확정]. 예전 슬롯은 삭제 표시, 같은 id로 마지막 페이지에 삽입</td><td>(페이지, 슬롯)이 바뀜 → Phase 2에서 인덱스 갱신</td></tr>
+        </table></div></div>
+    </div>
+    <div class="callout warn" style="margin-top:16px">
+      <b>nextId의 한계 [확정]</b> — 실행 중에는 지운 id를 다시 쓰지 않는다(nextId는 줄지 않는다). 하지만 nextId는 파일에 저장하지 않고, 시작할 때 모든 데이터 페이지를 훑어 "최대 id + 1"로 복원한다. 그래서 <b>마지막 id의 행을 지우고 재시작하면 그 id가 다시 쓰인다.</b> 설계 1.7에 한계로 적혀 있다.
+    </div>
+    <div class="callout" style="margin-top:12px">
+      <b>죽은 공간 처리 [확정]</b> — 삭제된 슬롯은 재사용하지 않는다. 당겨 모음(compaction)은 UPDATE에서 "빈 공간 합은 충분한데 연속 공간이 모자랄 때"만 한다 (설계 1.10).
+    </div>
+  </section>
+
+  <section>
+    <h2>핵심 정리</h2>
+    <div class="card"><ul class="summary-list">
+      <li>SQL 문자열 → 렉서(토큰 목록) → 파서(AST) → 값 검사 → 행 인코딩(바이트) → 페이지 · 슬롯 → 파일. 단계마다 잡는 에러가 다르다.</li>
+      <li>페이지는 슬롯을 앞에서, 행을 뒤에서 채운다. 삭제와 길어지는 UPDATE는 슬롯 번호를 그대로 두고 offset만 바꾼다. 남은 바이트는 죽은 공간이 된다.</li>
+      <li>SELECT는 거꾸로다. 페이지를 훑고, 슬롯을 따라가 바이트를 읽고, 스키마 순서대로 디코딩한 뒤 WHERE가 참인 행만 내보낸다.</li>
+    </ul></div>
+    <h3 style="margin-top:24px">확인 질문</h3>
+    <details class="quiz"><summary>1. 'kim' 행을 넣은 직후(UPDATE 전)에 <code>INSERT INTO users VALUES ('park', 25);</code>를 실행한다. 새 행의 16진수 바이트, 길이, 행 위치, 슬롯 1의 값과 위치, free_start, free_end, 남은 공간을 모두 적어라.</summary>
+      <p><b>바이트:</b> <code>00 | 00 00 00 02 | 00 04 70 61 72 6B | 00 00 00 19</code> (id = 2, 길이 4, 'p' 'a' 'r' 'k', 25 = 0x19)</p>
+      <p><b>길이:</b> 1 + 4 + (2 + 4) + 4 = 15바이트</p>
+      <p><b>행 위치:</b> 8178 − 15 = 8163 (8163~8177). <b>슬롯 1:</b> (8163, 15), 위치 20~23</p>
+      <p><b>free_start:</b> 20 → 24. <b>free_end:</b> 8178 → 8163. <b>남은 공간:</b> 8163 − 24 = 8139</p>
+      <p class="small muted">채점: 하나라도 틀리면 부분 정답. id를 1로 적었거나 행 위치를 8192에서 뺐으면 오답.</p></details>
+    <details class="quiz"><summary>2. DELETE가 슬롯 0을 슬롯표에서 아예 빼고 뒤 슬롯을 당긴다면 무엇이 깨지는가? 그리고 offset = 0이 "삭제됨" 표시로 쓰여도 진짜 행과 헷갈리지 않는 이유는?</summary>
+      <p><b>깨지는 것:</b> 뒤 슬롯의 번호가 하나씩 바뀐다. 인덱스가 기억한 (페이지, 슬롯)이 다른 행을 가리키게 된다.</p>
+      <p><b>헷갈리지 않는 이유:</b> 페이지의 0~15바이트는 헤더다. 행은 그 자리에서 시작할 수 없으므로 offset 0은 진짜 행 위치로 나올 수 없는 값이다.</p>
+      <p class="small muted">채점: 두 부분을 모두 맞혀야 정답. "인덱스가 깨진다"만 쓰고 왜(번호가 바뀜)를 안 썼으면 부분 정답.</p></details>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  출처: 설계 문서 <code>study/미니DBMS-설계.md</code> 1절 (1.1 문법 ~ 1.10 DELETE), 실제 렉서 <code>mini-dbms-jiho/src/main/java/minidb/sql/Lexer.java</code> (#22).
+  같지 않음 연산자 <code>&lt;&gt;</code> · <code>!=</code>: <a href="https://dev.mysql.com/doc/refman/8.4/en/comparison-operators.html">MySQL 8.4 Reference Manual — Comparison Functions and Operators</a>.
+  페이지의 Java 코드는 설계를 따라 쓴 학습용 축소판이며 컴파일 · 실행해 보지 않았다.
+</div></footer>
+
+<script>
+/* ===== 테마 토글 ===== */
+const themeBtn = document.getElementById('themeBtn');
+function paintThemeBtn(){
+  const dark = document.documentElement.dataset.theme !== 'light';
+  themeBtn.textContent = dark ? '☀ 라이트' : '☾ 다크';
+  themeBtn.setAttribute('aria-label', dark ? '라이트 모드로 전환' : '다크 모드로 전환');
+}
+themeBtn.onclick = () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('sv-theme', next); } catch (e) {}
+  paintThemeBtn();
+};
+paintThemeBtn();
+
+/* ===== 학습용 Java 코드. 줄 앞의 "글자|"는 강조용 꼬리표 (C(이름, 꼬리표들)로 그 줄만 강조) ===== */
+const SRC = Object.fromEntries(Object.entries({
+maxRow: String.raw`|// Schema.java (학습용 축소판) — 테이블을 정의할 때 한 번 계산
+a|int maxRowSize() {                              // 이 테이블의 행이 가장 길 때 몇 바이트인가
+a|  int size = (columns.size() + 7) / 8;          // NULL 비트맵: ceil(3 / 8) = 1
+a|  for (Column c : columns)                      // id, name, age
+a|    size += c.type() == INT ? 4 : 2 + 4 * c.n(); // INT 4, VARCHAR(20) = 2 + 4×20 = 82
+a|  return size;                                  // 1 + 4 + 82 + 4 = 91. 8172 이하면 통과
+a|}`,
+lexer: String.raw`|// Lexer.java (학습용 축소판) — 문자열 src를 pos 위치부터 읽는다
+|Token next() {                                  // 부를 때마다 토큰 하나를 잘라 돌려준다
+|  skipSpaces();                                 // 공백은 토큰이 아니다. 건너뛴다
+e|  if (pos >= src.length()) return tok(EOF, ""); // 다 읽었으면 끝 표시
+|  char c = src.charAt(pos);                     // 지금 보고 있는 글자
+w|  if (Character.isLetter(c)) {                  // 글자로 시작 → 단어
+w|    String w = readWhile(letterOrDigit);        // 글자·숫자가 이어지는 데까지 읽는다
+w|    return KEYWORDS.contains(w.toUpperCase())   // 키워드 목록에 있나?
+w|         ? tok(KEYWORD, w.toUpperCase())        //   있으면 대문자로 맞춘 키워드
+w|         : tok(IDENT, w);                       //   없으면 이름 (테이블 · 칸)
+|  }
+n|  if (isDigit(c)) return tok(NUMBER, readWhile(digit)); // 숫자는 글자 그대로 "20"
+s|  if (c == '\'') {                              // 따옴표 → 문자열 시작
+s|    pos++;                                      // 여는 ' 는 버린다
+s|    String str = readUntil('\'');               // 닫는 ' 전까지 통째로 (공백 · 쉼표 포함)
+s|    if (pos >= src.length()) throw error("닫히지 않은 따옴표");
+s|    pos++;                                      // 닫는 ' 도 버린다
+s|    return tok(STRING, str);                    // 값은 따옴표를 벗긴 kim
+|  }
+g|  if (c == '>' && peek(1) == '=') { pos += 2; return tok(GE, ">="); } // 두 글자짜리를 먼저 확인
+g|  if (c == '>') { pos++; return tok(GT, ">"); } // 아니면 한 글자 >
+p|  return symbol(c);                             // ( ) , ; * = 같은 한 글자 기호. 모르는 글자면 에러
+|}`,
+parseInsert: String.raw`|// Parser.java (학습용 축소판) — 문법: INSERT INTO 이름 VALUES ( 값 , 값 ... ) ;
+|Insert parseInsert() {
+a|  expectKeyword("INSERT");                      // 지금 토큰이 INSERT가 아니면 에러, 맞으면 한 칸 전진
+a|  expectKeyword("INTO");
+a|  String table = expect(IDENT).text();          // 테이블 이름 → "users"
+b|  expectKeyword("VALUES");
+b|  expect(LPAREN);
+b|  List<Literal> values = new ArrayList<>();
+b|  do { values.add(parseLiteral()); }            // 값 하나: STRING 또는 NUMBER 토큰
+b|  while (match(COMMA));                         // 쉼표가 있으면 값이 더 있다
+c|  expect(RPAREN);
+c|  expect(SEMICOLON);                            // 빠지면 "SEMICOLON이 와야 함" 에러
+c|  return new Insert(table, values);             // AST 노드 완성
+|}
+x|Token expect(TokenType t) {                     // 문법 대조의 기본 도구
+x|  if (peek().type() != t)                       // 기대한 종류가 아니면
+x|    throw error(peek(), t + "이(가) 와야 하는데 " + peek().text()); // 그 토큰의 줄:칸을 붙여 에러
+x|  return tokens.get(pos++);                     // 맞으면 그 토큰을 쓰고 다음으로
+x|}`,
+parseSelect: String.raw`|// Parser.java (학습용 축소판) — 문법: SELECT * FROM 이름 [WHERE 조건] ;
+|Select parseSelect() {
+a|  expectKeyword("SELECT");
+a|  expect(STAR);                                 // 축소판은 * 만 받는다
+a|  expectKeyword("FROM");                        // FROM이 빠지면 여기서 에러
+a|  String table = expect(IDENT).text();          // "users"
+b|  Expr where = null;                            // WHERE는 없어도 된다
+b|  if (matchKeyword("WHERE")) where = parseCompare(); // 있으면 조건 규칙의 함수로 내려간다
+c|  expect(SEMICOLON);
+c|  return new Select(table, where);
+|}
+b|Expr parseCompare() {                           // 조건 하나: 왼쪽 연산자 오른쪽
+b|  Expr left = parseOperand();                   // Column(age)
+b|  TokenType op = next().type();                 // GE
+b|  Expr right = parseOperand();                  // Literal(20)
+b|  return new Compare(op, left, right);          // 자식 둘을 가진 노드 → 트리가 된다
+b|}`,
+validate: String.raw`|// Validator.java (학습용 축소판, NULL 검사는 생략) — AST를 스키마와 대조
+|Object[] checkInsert(Schema schema, Insert ast) {
+a|  List<Column> cols = schema.columnsWithoutId(); // id를 뺀 칸: name, age
+a|  if (ast.values().size() != cols.size())       // 값 2개 == 칸 2개 ?
+a|    throw error("값 개수가 칸 개수와 다름");
+|  Object[] row = new Object[schema.size()];     // [id, name, age] 자리 3개
+|  for (int i = 0; i < cols.size(); i++) {
+b|    Literal v = ast.values().get(i);
+b|    Column col = cols.get(i);
+b|    if (col.type() == VARCHAR) {
+b|      if (!v.isString()) throw error(col.name() + ": 문자열이어야 함");
+b|      if (v.text().codePointCount(0, v.text().length()) > col.n()) // 글자 수 3 ≤ 20 ?
+b|        throw error(col.name() + ": " + col.n() + "글자를 넘음");
+b|      row[i + 1] = v.text();
+b|    } else {                                    // INT
+b|      if (!v.isNumber()) throw error(col.name() + ": 숫자여야 함");
+b|      row[i + 1] = Integer.parseInt(v.text());  // 글자 "20" → 정수 20. 범위 밖이면 에러
+b|    }
+|  }
+c|  row[0] = nextId;                              // id는 실행기가 정한다. nextId는 아직 안 올린다
+|  return row;                                   // [1, "kim", 20]
+|}`,
+encode: String.raw`|// RowCodec.java (학습용 축소판) — 값 배열 → 바이트 배열
+|byte[] encode(Schema schema, Object[] row) {
+|  ByteBuffer buf = ByteBuffer.allocate(schema.maxRowSize()); // 최대 91바이트. ByteBuffer는 기본이 빅엔디언
+a|  byte[] bitmap = new byte[(schema.size() + 7) / 8]; // ceil(3 / 8) = 1바이트
+a|  for (int i = 0; i < row.length; i++)
+a|    if (row[i] == null) bitmap[i / 8] |= 1 << (i % 8); // NULL인 칸의 비트만 1 (비트 순서는 설계에 안 적힘. 여기선 낮은 비트부터로 가정)
+a|  buf.put(bitmap);                              // 맨 앞에 비트맵
+|  for (int i = 0; i < row.length; i++) {        // 스키마 순서대로: id, name, age
+|    if (row[i] == null) continue;               // NULL은 값 바이트를 쓰지 않는다
+i|    if (schema.type(i) == INT) {
+i|      buf.putInt((Integer) row[i]);             // 4바이트, 큰 자리부터
+|    } else {                                    // VARCHAR
+v|      byte[] utf8 = ((String) row[i]).getBytes(UTF_8);
+v|      buf.putShort((short) utf8.length);        // 길이 2바이트 (글자 수가 아니라 바이트 수)
+v|      buf.put(utf8);                            // 글자 바이트
+|    }
+|  }
+r|  return Arrays.copyOf(buf.array(), buf.position()); // 실제로 쓴 만큼만 잘라 돌려준다
+|}`,
+decode: String.raw`|// RowCodec.java (학습용 축소판) — 바이트 배열 → 값 배열. encode의 거울
+|Object[] decode(Schema schema, byte[] bytes) {
+|  ByteBuffer buf = ByteBuffer.wrap(bytes);
+|  byte[] bitmap = new byte[(schema.size() + 7) / 8];
+a|  buf.get(bitmap);                              // 먼저 비트맵 1바이트
+|  Object[] row = new Object[schema.size()];
+|  for (int i = 0; i < row.length; i++) {        // 쓸 때와 같은 순서로 읽어야 한다
+|    if ((bitmap[i / 8] >> (i % 8) & 1) == 1) continue; // NULL이면 읽을 바이트가 없다
+a|    if (schema.type(i) == INT) {
+a|      row[i] = buf.getInt();                    // 4바이트 → 정수
+|    } else {
+a|      byte[] utf8 = new byte[buf.getShort()];   // 길이 2바이트를 먼저 읽고
+a|      buf.get(utf8);                            // 그만큼만 읽는다
+a|      row[i] = new String(utf8, UTF_8);
+|    }
+|  }
+|  return row;                                   // [1, "kim", 20]
+|}`,
+pageInsert: String.raw`|// DataPage.java (학습용 축소판) — buf는 이 페이지의 8192바이트
+|int insert(byte[] row) {                        // 돌려주는 값: 슬롯 번호
+a|  if (freeEnd - freeStart < row.length + 4)     // 행 + 슬롯 4바이트가 들어가나?
+a|    throw new PageFullException();              // 부른 쪽이 새 페이지를 만든다
+b|  freeEnd -= row.length;                        // 행은 뒤에서부터: 8192 - 14 = 8178
+b|  buf.put(freeEnd, row);                        // 8178 ~ 8191에 행 바이트
+c|  int slot = slotCount;                         // 새 슬롯 번호 = 0
+c|  buf.putShort(freeStart, (short) freeEnd);     // 슬롯의 앞 2바이트: offset 8178
+c|  buf.putShort(freeStart + 2, (short) row.length); // 슬롯의 뒤 2바이트: length 14
+c|  freeStart += 4;                               // 슬롯은 앞에서부터: 16 → 20
+c|  slotCount++;                                  // 0 → 1
+|  return slot;
+|}`,
+pageUpdate: String.raw`|// DataPage.java (학습용 축소판)
+|void update(int slot, byte[] row) {
+|  int pos = 16 + slot * 4;                      // 슬롯 위치는 계산으로: 16 + 0 × 4 = 16
+|  int oldOff = buf.getShort(pos), oldLen = buf.getShort(pos + 2); // (8178, 14)
+a|  if (row.length <= oldLen) {                   // 17 <= 14 ? 아니다
+|    buf.put(oldOff, row);                       // (같거나 짧을 때만) 제자리에 덮어쓴다
+a|  } else if (freeEnd - freeStart >= row.length) { // 8178 - 20 = 8158 >= 17 ? 맞다
+b|    freeEnd -= row.length;                      // 8178 - 17 = 8161
+b|    buf.put(freeEnd, row);                      // 8161 ~ 8177에 새 행. 예전 바이트는 그대로 둔다
+b|    buf.putShort(pos, (short) freeEnd);         // 슬롯 0의 offset만 8161로. 번호는 그대로 0
+|  } else throw new PageFullException();         // 자리 없음 → 실행기가 다른 페이지로 옮긴다 (설계 1.9)
+b|  buf.putShort(pos + 2, (short) row.length);    // length 14 → 17
+|}`,
+pageDelete: String.raw`|// DataPage.java (학습용 축소판)
+|void delete(int slot) {
+a|  buf.putShort(16 + slot * 4, (short) 0);       // offset = 0 → "삭제됨". 슬롯 자체는 남긴다
+|}                                               // 행 바이트는 지우지 않는다 → 죽은 공간`,
+execInsert: String.raw`|// Executor.java (학습용 축소판) — 번호는 설계 1.7의 순서
+|void insert(Insert ast) {
+a|  Object[] row = Validator.checkInsert(schema, ast); // ① 값 검사 ② id 부여
+b|  byte[] bytes = RowCodec.encode(schema, row);  // ③ 행 인코딩 → 14바이트
+c|  DataPage page = lastPageOrNull();             // ④ 마지막 데이터 페이지만 본다
+c|  if (page == null || page.freeSpace() < bytes.length + 4)
+c|    page = newPage();                           //    없거나 좁으면 새 페이지 (1번)
+d|  page.insert(bytes);                           // ⑤ 메모리에 있는 페이지를 고친다
+e|  page.writeHeader();                           //    헤더 갱신 + checksum (축소판은 자리만)
+e|  file.write(page.id() * 8192L, page.bytes());  // ⑥ 8KB 통째로 파일에. 위치 1 × 8192 = 8192
+f|  nextId++;                                     // ⑧ 쓰기에 성공한 뒤에만. ⑦ 인덱스 등록은 Phase 2
+|}`,
+execSelect: String.raw`|// Executor.java (학습용 축소판) — 인덱스가 없으므로 처음부터 끝까지 훑는다
+|List<Object[]> select(Select ast) {
+|  List<Object[]> out = new ArrayList<>();
+a|  for (int p = 1; p < pageCount; p++) {         // 0번은 메타. 데이터 페이지는 1번부터
+a|    DataPage page = readPage(p);                // 파일 위치 p × 8192에서 8KB 읽기
+a|    page.verifyChecksum();                      // 찢어진 페이지면 여기서 에러
+a|    for (int s = 0; s < page.slotCount(); s++) {
+a|      int off = page.slotOffset(s);             // 슬롯 위치 16 + s × 4에서 offset 읽기
+a|      if (off == 0) continue;                   // 0 = 삭제됨. 건너뛴다
+a|      byte[] bytes = page.read(off, page.slotLength(s)); // offset부터 length만큼
+c|      Object[] row = RowCodec.decode(schema, bytes);
+d|      if (ast.where() == null || eval(ast.where(), row) == TRUE) // 참일 때만. 거짓 · 알 수 없음은 탈락
+d|        out.add(row);
+|    }
+|  }
+|  return out;
+|}`
+}).map(([k, v]) => [k, v.split('\n')]));
+const C = (name, tags = '') => SRC[name].map(l => { const i = l.indexOf('|'); return (i > 0 && tags.includes(l.slice(0, i)) ? '!' : '') + l.slice(i + 1); });
+
+/* ===== 실제 값을 계산하는 작은 도우미 (손으로 적지 않고 돌려서 만든다) ===== */
+const SQL = {
+  create: "CREATE TABLE users (name VARCHAR(20), age INT);",
+  insert: "INSERT INTO users VALUES ('kim', 20);",
+  select: "SELECT * FROM users WHERE age >= 20;",
+  update: "UPDATE users SET name = 'kimchi' WHERE id = 1;",
+  del:    "DELETE FROM users WHERE id = 1;"
+};
+const KW = new Set('CREATE TABLE INSERT INTO VALUES SELECT FROM WHERE UPDATE SET DELETE'.split(' '));
+const SYM = {',':'COMMA', '(':'LPAREN', ')':'RPAREN', ';':'SEMICOLON', '*':'STAR', '=':'EQ', '>=':'GE', '>':'GT'};
+function lex(sql){
+  const out = [], re = /\s*(?:([A-Za-z_]\w*)|(\d+)|'([^']*)'|(>=|[,();*=>]))/y; let m;
+  while (re.lastIndex < sql.length && (m = re.exec(sql))) {
+    if (m[1] !== undefined) { const u = m[1].toUpperCase(); out.push(KW.has(u) ? {k:'KEYWORD', t:u} : {k:'IDENT', t:m[1]}); }
+    else if (m[2] !== undefined) out.push({k:'NUMBER', t:m[2]});
+    else if (m[3] !== undefined) out.push({k:'STRING', t:m[3]});
+    else out.push({k:SYM[m[4]], t:m[4]});
+  }
+  out.push({k:'EOF', t:''});
+  return out;
+}
+const hx = (n, bytes) => n.toString(16).toUpperCase().padStart(bytes * 2, '0').match(/../g);
+function encodeRow(id, name, age){   // [비트맵][id 4B][길이 2B + UTF-8][age 4B], 빅엔디언
+  const u = [...new TextEncoder().encode(name)].map(b => hx(b, 1)[0]);
+  return [ {label:'NULL 비트맵', hex:['00']}, {label:`id = ${id}`, hex:hx(id, 4)},
+           {label:`길이 = ${u.length}`, hex:hx(u.length, 2)}, {label:`'${name}'`, hex:u}, {label:`age = ${age}`, hex:hx(age, 4)} ];
+}
+const flat = groups => groups.flatMap(g => g.hex);
+const KIM = encodeRow(1, 'kim', 20), KIMCHI = encodeRow(1, 'kimchi', 20);
+const INS = lex(SQL.insert);
+const N = v => ({n:v});
+const cmp = (op, col, lit) => ({n:`Compare(${op})`, c:[{n:`Column(${col})`, leaf:1}, {n:`Literal(${lit})`, leaf:1}]});
+
+/* ===== 단계 정의: 바뀌는 것만 apply에 적는다 (style-guide.md 6장) ===== */
+const initial = {
+  stage:'', sql:'', schema:null, nextId:null,
+  tokens:[], ast:null,
+  row:null, notes:[], bytes:null,          // bytes: {title, groups:[{label, hex:[]}]}
+  file:{meta:false, pages:0},
+  page:null,                               // {id, slotCount, freeStart, freeEnd, slots:[{off,len}], regions:[{from,len,kind,label}], disk}
+  out:null                                 // {msg, rows?}
+};
+const steps = [
+  { phase:'준비', title:'시작: SQL 다섯 줄과 흐름 지도',
+    what:'사용자가 SQL 다섯 줄을 보낸다. 이 페이지는 INSERT 한 줄을 끝까지 따라가고, SELECT · UPDATE · DELETE는 달라지는 부분만 본다.',
+    why:'SQL은 사람이 읽는 글자고, 파일에는 바이트만 들어간다. 그 사이를 렉서 → 파서 → 값 검사 → 인코딩 → 페이지 → 파일 순서로 한 단계씩 바꾼다. 단계를 나누면 에러가 어느 단계에서 났는지 바로 알 수 있다. 실제로는 여러 문장이 한꺼번에 오면 <b>전부 파싱한 뒤</b> 실행한다(하나라도 문법이 틀리면 아무것도 실행하지 않는다). 여기서는 보기 쉽게 한 문장씩 따라간다.',
+    code:[], apply(s){} },
+
+  { phase:'준비', title:'CREATE TABLE: 스키마를 0번 페이지에 저장',
+    what:'실행기가 맨 앞에 <code>id INT</code> 칸을 자동으로 붙여 스키마를 (id, name, age)로 만든다. 행 한도를 검사한다: 비트맵 1 + INT 4 + VARCHAR(20) 82 + INT 4 = <b>91 ≤ 8172</b> ✓. 통과하면 스키마를 <code>users.db</code>의 0번 메타 페이지(파일 위치 0)에 쓴다. nextId는 1이다.',
+    why:'행 바이트에는 칸 이름도 타입도 없다. 스키마가 있어야 값 검사 · 인코딩 · 디코딩을 할 수 있다. 한도 8172는 페이지 8192 − 헤더 16 − 슬롯 4다. VARCHAR(20)의 최대 크기는 길이 2 + 한 글자 최대 4바이트 × 20 = 82다. 정의할 때 가장 긴 경우를 검사해 두면, 어떤 INSERT도 페이지 하나를 넘지 않는다고 보장된다.',
+    ifnot:'한도 검사가 없으면 페이지 하나에 안 들어가는 행이 생길 수 있고, 그 사실을 INSERT하는 순간에야 알게 된다.',
+    code:C('maxRow', 'a'),
+    apply(s){ s.stage = 'file'; s.sql = SQL.create;
+      s.schema = [{name:'id', type:'INT', note:'자동'}, {name:'name', type:'VARCHAR(20)'}, {name:'age', type:'INT'}];
+      s.nextId = 1; s.file.meta = true; s.out = {msg:'테이블 users 생성'}; } },
+
+  { phase:'렉서', title:'렉서 ①: 단어를 묶는다 (키워드 / 이름)',
+    what:'렉서가 INSERT 문자열을 앞에서부터 한 글자씩 본다. 글자로 시작하면 글자 · 숫자가 이어지는 데까지 읽어 단어 하나로 묶는다. <code>INSERT</code>, <code>INTO</code>는 키워드 목록에 있어 KEYWORD, <code>users</code>는 없어서 IDENT(이름)가 된다.',
+    why:'파서가 글자가 아니라 "단어"를 보게 하려는 것이다. 키워드는 대문자로 맞춰 저장하므로 <code>insert</code>, <code>Insert</code>도 같은 토큰이 된다. 이름은 쓴 그대로 둔다.',
+    ifnot:'파서가 공백 건너뛰기, 대소문자 맞추기, 단어 끝 찾기를 문법 검사와 동시에 해야 해서 코드가 엉킨다.',
+    code:C('lexer', 'w'),
+    apply(s){ s.stage = 'lex'; s.sql = SQL.insert; s.out = null; s.tokens = INS.slice(0, 3); } },
+
+  { phase:'렉서', title:'렉서 ②: 따옴표 안은 통째로 문자열 하나',
+    what:"<code>VALUES</code>(KEYWORD), <code>(</code>(LPAREN)를 읽는다. 다음 글자가 <code>'</code>이면 닫는 <code>'</code>가 나올 때까지 통째로 읽어 STRING 토큰 하나로 만든다. 토큰에는 따옴표를 벗긴 <code>kim</code>만 담는다.",
+    why:"따옴표 안은 공백 · 쉼표가 있어도, 키워드처럼 생겨도 전부 값이다. <code>'a, b'</code>나 <code>'select'</code>가 그 예다. 그래서 단어 규칙보다 따옴표 규칙이 우선한다.",
+    ifnot:"<code>'kim lee'</code>가 두 단어로 쪼개진다. 또 닫는 따옴표가 없으면 문자열 끝까지 읽어 버리므로, 렉서가 \"닫히지 않은 따옴표\" 에러를 잡아야 한다.",
+    code:C('lexer', 's'),
+    apply(s){ s.tokens = INS.slice(0, 6); } },
+
+  { phase:'렉서', title:'렉서 ③: 숫자는 글자 그대로, 끝에는 EOF',
+    what:'<code>,</code>(COMMA), <code>20</code>(NUMBER), <code>)</code>(RPAREN), <code>;</code>(SEMICOLON)을 읽고, 끝에 EOF를 붙인다. 토큰 10개 + EOF가 완성된다. NUMBER 토큰은 정수 20이 아니라 <b>글자 "20"</b>을 담는다.',
+    why:'이 숫자가 INT 칸에 들어갈지 다른 타입 칸에 들어갈지 렉서는 모른다. 변환은 스키마를 아는 값 검사 단계가 한다(설계 1.2 [제안]: 렉서가 미리 double로 바꾸면 DECIMAL의 정확한 값이 깨진다). EOF는 파서가 "더 읽을 토큰이 없음"을 배열 범위 검사 없이 알게 해 준다.',
+    ifnot:'렉서는 문법을 보지 않는다는 점에 주의한다. <code>VALUES INSERT ( (</code> 같은 순서도 렉서는 통과시킨다. 순서를 잡는 것은 다음 단계인 파서다.',
+    code:C('lexer', 'npe'),
+    apply(s){ s.tokens = INS; } },
+
+  { phase:'파서', title:'파서 ①: 토큰 순서를 문법과 대조한다',
+    what:'파서가 토큰을 앞에서부터 하나씩 꺼내 문법과 맞춰 본다. <code>expectKeyword("INSERT")</code> → 맞음, 한 칸 전진. <code>INTO</code> → 맞음. 다음은 IDENT여야 한다 → <code>users</code>를 테이블 이름으로 기억한다.',
+    why:'토큰 목록은 한 줄로 늘어선 단어일 뿐이다. 어느 것이 테이블 이름이고 어느 것이 값인지는 <b>자리(순서)</b>가 정한다. 문법 규칙 하나를 함수 하나로 쓰고(<code>parseInsert</code>), 규칙 안에 다른 규칙이 있으면 그 함수를 부른다. 이 방식을 재귀 하강 파서라고 한다.',
+    ifnot:'<code>expect</code>가 없으면 <code>INSERT users VALUES …</code>처럼 INTO가 빠진 문장을 그대로 받아들인다. 에러를 낼 때는 토큰이 기억한 줄:칸을 붙여야 사용자가 어디가 틀렸는지 안다.',
+    code:C('parseInsert', 'ax'),
+    apply(s){ s.stage = 'parse'; s.ast = {n:'Insert', c:[N('table: users')]}; } },
+
+  { phase:'파서', title:'파서 ②: 값 목록을 모아 AST를 완성한다',
+    what:"<code>VALUES</code>, <code>(</code>를 확인하고, 쉼표가 이어지는 동안 값을 모은다: <code>'kim'</code>, <code>20</code>. <code>)</code>와 <code>;</code>를 확인하면 <b>Insert{table: users, values: ['kim', 20]}</b>이 완성된다.",
+    why:'토큰 목록은 일렬(10개 + EOF)이고 AST는 트리다. 괄호 · 쉼표 · 세미콜론은 "어디서 어디까지가 값 목록인가"를 알려 주는 역할을 끝냈으므로 AST에는 없다. 실행기는 AST만 보면 된다.',
+    ifnot:'실행기가 토큰을 직접 보면 문장 종류마다 "몇 번째 토큰이 값인가"를 다시 세야 한다. 문법 확인과 실행이 한 코드에 섞인다.',
+    code:C('parseInsert', 'bc'),
+    apply(s){ s.ast = {n:'Insert', c:[N('table: users'), {n:'values', c:[{n:"Literal('kim') · STRING", leaf:1}, {n:'Literal(20) · NUMBER', leaf:1}]}]}; } },
+
+  { phase:'검사', title:'값 검사: AST를 스키마와 대조한다',
+    what:"실행기가 AST의 값을 스키마와 맞춰 본다. 값 2개 = id를 뺀 칸 2개 ✓. <code>'kim'</code>은 문자열이고 3글자 ≤ 20 ✓. <code>\"20\"</code>은 숫자 토큰이고 INT로 변환된다 ✓.",
+    why:"문법이 맞아도 내용이 틀릴 수 있다. <code>VALUES (20, 'kim')</code>은 문법으로는 완벽하지만 타입이 어긋난다. 파서는 스키마를 모르므로, 스키마를 아는 실행기가 인코딩 전에 걸러야 한다.",
+    ifnot:'21글자짜리 이름이 그대로 들어가면 "VARCHAR(20)은 최대 82바이트"라는 계산이 틀어지고, CREATE 때 한 행 한도 보장이 깨진다.',
+    code:C('validate', 'ab'),
+    apply(s){ s.stage = 'check'; s.row = ['?', 'kim', 20];
+      s.notes = ['값 개수 2 = id를 뺀 칸 개수 2 ✓', "name: 'kim'은 문자열, 3글자 ≤ 20 ✓", 'age: "20" → 정수 20 (INT) ✓']; } },
+
+  { phase:'검사', title:'id 부여: nextId를 쓴다 (아직 올리지 않는다)',
+    what:'실행기가 id 칸에 nextId 값인 <b>1</b>을 넣는다. 행의 값은 (1, \'kim\', 20)이 된다. nextId는 아직 1 그대로다.',
+    why:'id는 사용자가 적지 않고 실행기가 정한다. 그래서 중복될 수 없다. nextId를 지금 올리지 않는 이유는, 뒤의 파일 쓰기가 실패할 수 있기 때문이다.',
+    ifnot:'여기서 바로 nextId를 2로 올리면, 쓰기가 실패했을 때 파일에 없는 행이 id 1을 차지한 것처럼 된다.',
+    code:C('validate', 'c'),
+    apply(s){ s.row = [1, 'kim', 20]; s.notes.push('id = nextId = 1'); } },
+
+  { phase:'인코딩', title:'인코딩 ①: NULL 비트맵 1바이트',
+    what:'<code>RowCodec.encode</code>가 맨 앞에 NULL 비트맵을 쓴다. 칸이 3개라 ceil(3 / 8) = 1바이트다. NULL인 칸이 없으므로 <code>00</code>이다.',
+    why:'NULL은 값 바이트를 아예 쓰지 않는다(0바이트). 그러면 읽는 쪽이 "이 칸은 건너뛰어라"를 알아야 한다. 그 표시가 비트맵이다. i번 칸이 NULL이면 i번 비트가 1이다.',
+    ifnot:"비트맵이 없으면 NULL과 0, NULL과 빈 문자열 <code>''</code>을 구분할 수 없다.",
+    code:C('encode', 'a'),
+    apply(s){ s.stage = 'encode'; s.bytes = {title:'만드는 중인 행 바이트', groups:KIM.slice(0, 1)}; } },
+
+  { phase:'인코딩', title:'인코딩 ②: id = 1 → 00 00 00 01',
+    what:'첫 칸 id(INT)를 4바이트로 쓴다. 빅엔디언(큰 자리 바이트가 앞)이라 <code>00 00 00 01</code>이다. 지금까지 5바이트.',
+    why:'쓰는 코드와 읽는 코드가 같은 바이트 순서를 써야 한다. 설계는 빅엔디언으로 고정했고[제안], Java의 ByteBuffer도 기본이 빅엔디언이다. 리틀엔디언이었다면 <code>01 00 00 00</code>이 된다.',
+    ifnot:'순서가 어긋나면 1이 16,777,216(0x01000000)으로 읽힌다.',
+    code:C('encode', 'i'),
+    apply(s){ s.bytes.groups = KIM.slice(0, 2); } },
+
+  { phase:'인코딩', title:"인코딩 ③: name = 'kim' → 길이 2바이트 + 글자",
+    what:"VARCHAR는 길이를 먼저 2바이트로 쓰고(<code>00 03</code>), 이어서 UTF-8 바이트를 쓴다: 'k' = <code>6B</code>, 'i' = <code>69</code>, 'm' = <code>6D</code>. 지금까지 10바이트.",
+    why:"VARCHAR는 행마다 길이가 다르다. 길이를 앞에 적어 둬야 읽는 쪽이 name이 어디서 끝나는지 안다. 이 길이는 <b>글자 수가 아니라 바이트 수</b>다. 한글 '김'은 1글자지만 3바이트(<code>EA B9 80</code>)다.",
+    ifnot:'길이가 없으면 name의 끝과 age의 시작을 구분할 수 없다. 길이를 1만 틀리게 써도 뒤 칸이 전부 한 바이트씩 밀려 읽힌다.',
+    code:C('encode', 'v'),
+    apply(s){ s.bytes.groups = KIM.slice(0, 4); } },
+
+  { phase:'인코딩', title:'인코딩 ④: age = 20 → 00 00 00 14, 합계 14바이트',
+    what:'마지막 칸 age(INT) 20은 16진수로 0x14다. <code>00 00 00 14</code>를 쓴다. 합계 1 + 4 + (2 + 3) + 4 = <b>14바이트</b>.',
+    why:'행 바이트에는 "여기부터 age"라는 표시가 없다. <b>스키마 순서</b>가 유일한 해석 기준이다. 그래서 칸 순서 = 스키마 순서로 고정한다.',
+    ifnot:'쓰는 순서와 읽는 순서가 다르면 에러 없이 틀린 값이 읽힌다. 직접 세어 보자: 비트맵 1, id 4, 길이 2, 글자 3, age 4.',
+    code:C('encode', 'ir'),
+    apply(s){ s.bytes = {title:'완성된 행 바이트 (14바이트)', groups:KIM}; } },
+
+  { phase:'페이지', title:'페이지 선택: 데이터 페이지가 없으니 1번을 새로 만든다',
+    what:'실행기가 마지막 데이터 페이지를 본다. 아직 하나도 없다. 메모리에 빈 1번 페이지를 만든다. 파일 위치는 1 × 8192 = <b>8192</b>다. 빈 페이지는 free_start 16, free_end 8192, 빈 공간 8176이다. 필요한 공간은 행 14 + 슬롯 4 = 18 ✓.',
+    why:'행만이 아니라 그 행을 가리킬 슬롯 4바이트도 필요하므로 "+4"를 한다. INSERT는 마지막 페이지만 본다(설계 1.7). 앞 페이지에 생긴 빈 공간은 UPDATE만 쓴다.',
+    ifnot:'+4를 빼먹으면 행은 들어가는데 슬롯 자리가 없어, 슬롯이 행 바이트를 덮어쓴다.',
+    code:C('execInsert', 'c'),
+    apply(s){ s.stage = 'page'; s.file.pages = 1;
+      s.page = {id:1, slotCount:0, freeStart:16, freeEnd:8192, slots:[], regions:[], disk:'메모리에만 있음 (아직 파일에 안 씀)'}; } },
+
+  { phase:'페이지', title:'행 쓰기: 페이지 맨 뒤에서부터',
+    what:'<code>DataPage.insert</code>가 free_end를 14만큼 당긴다: 8192 − 14 = <b>8178</b>. 행 14바이트를 8178~8191에 쓴다. 아직 메모리 안의 페이지만 바뀐 상태다.',
+    why:'행은 뒤에서 앞으로, 슬롯은 앞에서 뒤로 자란다. 슬롯표와 행이 각각 얼마나 커질지 미리 모르기 때문이다. 양 끝에서 마주 보며 채우면 가운데 빈 공간을 경계 없이 다 쓸 수 있다.',
+    ifnot:'둘 다 앞에서 채우면 슬롯 자리를 미리 정해 둬야 한다. 짧은 행이 많으면 슬롯 자리가 모자라고, 긴 행이 많으면 슬롯 자리가 남는다.',
+    code:C('pageInsert', 'ab'),
+    apply(s){ s.page.freeEnd = 8192 - flat(KIM).length; s.page.regions = [{from:s.page.freeEnd, len:14, kind:'row', label:"행 (id 1, 'kim')"}]; } },
+
+  { phase:'페이지', title:'슬롯 쓰기: "0번 행은 8178부터 14바이트"',
+    what:'free_start 위치(16~19)에 슬롯 0을 쓴다: offset <b>8178</b>, length <b>14</b>. free_start는 16 → 20, slot_count는 0 → 1이 된다. 남은 공간은 8178 − 20 = 8158이다.',
+    why:'행 길이가 제각각이라, 행을 찾으려면 "어디서부터 몇 바이트"를 적어 둔 표가 필요하다. 슬롯은 4바이트 고정이라 i번 슬롯 위치를 16 + i × 4로 바로 계산한다. 밖에서는 이 행을 <b>(페이지 1, 슬롯 0)</b>이라고 부른다.',
+    ifnot:'슬롯 없이 행의 바이트 위치를 직접 주소로 쓰면, 행을 페이지 안에서 옮길 때마다 그 주소를 기억한 곳(인덱스)을 전부 고쳐야 한다.',
+    code:C('pageInsert', 'c'),
+    apply(s){ s.page.slots = [{off:8178, len:14}]; s.page.freeStart = 20; s.page.slotCount = 1; } },
+
+  { phase:'페이지', title:'파일에 쓰기, 그 다음에 nextId + 1',
+    what:'헤더에 slot_count 1, free_start 20, free_end 8178을 적고 checksum(헤더 12~15)을 다시 계산한다. 그리고 8KB 페이지를 통째로 파일 위치 8192에 쓴다. 쓰기가 성공한 뒤에 nextId를 1 → 2로 올린다.',
+    why:'checksum은 CRC32이고, 그 4바이트 자리를 0으로 두고 계산한다. 쓰다가 죽어 반만 새 내용인 페이지를 다음에 읽을 때 알아채기 위한 것이다. nextId를 마지막에 올리는 이유는 "성공한 것만 반영"하기 위해서다. 인덱스 등록(Phase 2)도 같은 이유로 파일에 쓴 뒤에 한다. 실제 설계는 데이터 파일보다 로그(WAL)에 먼저 쓰는데(설계 1.12), 이 페이지에서는 다루지 않는다.',
+    ifnot:'nextId를 먼저 올리고 쓰기가 실패하면, 파일에 없는 행이 id 1을 차지한 것이 된다.',
+    code:C('execInsert', 'ef'),
+    apply(s){ s.stage = 'file'; s.page.disk = '파일에 씀 (파일 위치 8192)'; s.nextId = 2; s.out = {msg:'1행 삽입 (id = 1)'}; } },
+
+  { phase:'SELECT', title:'SELECT 렉서: >= 는 토큰 하나',
+    what:'이제 SELECT 문이다. 렉서가 <code>&gt;</code>를 만나면 바로 토큰을 만들지 않고 <b>다음 글자를 먼저 본다</b>. <code>=</code>이므로 두 글자를 묶어 GE 토큰 하나로 만든다. 토큰 9개 + EOF.',
+    why:'두 글자 연산자(<code>&gt;= &lt;= &lt;&gt; !=</code>)는 한 글자 연산자보다 먼저 확인해야 한다. 가장 길게 맞는 것을 고르는 규칙이다. "같지 않음"은 <code>&lt;&gt;</code>와 <code>!=</code>를 둘 다 받는다(MySQL도 둘 다 지원한다).',
+    ifnot:'<code>&gt;</code>와 <code>=</code>가 따로 토큰이 되면 파서는 <code>age &gt; = 20</code>을 보게 되고 문법 에러를 낸다.',
+    code:C('lexer', 'g'),
+    apply(s){ s.stage = 'lex'; s.sql = SQL.select; s.tokens = lex(SQL.select); s.ast = null; s.row = null; s.notes = []; s.bytes = null; s.out = null; } },
+
+  { phase:'SELECT', title:'SELECT 파서: WHERE 조건이 트리가 된다',
+    what:'<code>parseSelect</code>가 SELECT, <code>*</code>, FROM, 테이블 이름을 순서대로 확인한다. WHERE가 있으면 <code>parseCompare</code>로 내려가 <b>Compare(&gt;=, Column(age), Literal(20))</b>을 만든다.',
+    why:'조건식은 "연산자 하나에 자식 둘"인 트리로 담는다. 그러면 평가할 때 자식을 먼저 계산하고 연산자를 적용하면 된다. 실제 문법은 AND · OR · NOT · 괄호가 있어서 규칙 함수가 여러 층이고(우선순위 NOT &gt; AND &gt; OR), 서로를 부른다. 여기서는 비교 하나만 본다.',
+    ifnot:'에러 예: <code>SELECT * users WHERE age &gt;= 20;</code>처럼 FROM이 빠지면 <code>expectKeyword("FROM")</code>에서 "1:10: FROM이 와야 하는데 users"로 멈춘다. 파일은 건드리지 않는다.',
+    code:C('parseSelect', 'abc'),
+    apply(s){ s.stage = 'parse'; s.ast = {n:'Select', c:[N('columns: *'), N('table: users'), {n:'where', c:[cmp('>=', 'age', 20)]}]}; } },
+
+  { phase:'SELECT', title:'읽기: 페이지 → checksum → 슬롯 → 14바이트',
+    what:'실행기가 데이터 페이지를 1번부터 읽는다. 파일 위치 8192에서 8KB를 읽고 checksum을 확인한다. 슬롯 0의 위치는 16 + 0 × 4 = 16이고, 값은 (8178, 14)다. offset이 0이 아니므로 살아 있는 행이다. 8178부터 14바이트를 꺼낸다.',
+    why:'Phase 1에는 인덱스가 없어서 모든 데이터 페이지의 모든 슬롯을 훑는다(선형 탐색). 행을 찾는 길은 항상 슬롯을 거친다. 슬롯이 "어디서부터 몇 바이트"를 알려 주기 때문이다.',
+    ifnot:'checksum을 확인하지 않으면 반만 쓰인 페이지의 쓰레기 바이트를 정상 행으로 디코딩한다. offset 0 검사를 빼면 삭제된 행이 결과에 나온다.',
+    code:C('execSelect', 'a'),
+    apply(s){ s.stage = 'read'; s.bytes = {title:'1번 페이지 8178~8191에서 읽은 14바이트', groups:[{label:'아직 해석 전', hex:flat(KIM)}]}; } },
+
+  { phase:'SELECT', title:'디코딩: 스키마 순서대로 다시 값으로',
+    what:"<code>RowCodec.decode</code>가 앞에서부터 읽는다. 비트맵 1바이트(<code>00</code>, NULL 없음) → id 4바이트 = 1 → 길이 2바이트 = 3 → 3바이트 = 'kim' → age 4바이트 = 20.",
+    why:'인코딩의 거울이다. 가변 길이 칸은 앞의 2바이트 길이를 보고 그만큼만 읽는다. 바이트 자체에는 칸 경계가 없으므로, 스키마와 길이 값만이 경계를 알려 준다.',
+    ifnot:'스키마가 바뀌었는데 예전 바이트를 그대로 읽으면 에러 없이 틀린 값이 나온다.',
+    code:C('decode', 'a'),
+    apply(s){ s.bytes = {title:'읽은 14바이트를 스키마 순서로 해석', groups:KIM}; s.row = [1, 'kim', 20]; } },
+
+  { phase:'SELECT', title:'WHERE 평가: 20 >= 20 → 참 → 출력',
+    what:'WHERE 평가기가 이 행에 대해 AST의 조건을 계산한다. Column(age) → 20, Literal(20) → 20, <code>20 &gt;= 20</code> → <b>참</b>. 참이므로 결과에 넣는다.',
+    why:'조건의 결과는 참 / 거짓 / <b>알 수 없음</b> 세 가지다. age가 NULL이면 <code>NULL &gt;= 20</code>은 알 수 없음이고, 그 행은 나오지 않는다. 같은 평가기를 UPDATE · DELETE도 대상을 고를 때 쓴다.',
+    ifnot:'알 수 없음을 참으로 취급하면 NULL인 행이 조건에 맞는 것처럼 결과에 섞인다.',
+    code:C('execSelect', 'd'),
+    apply(s){ s.stage = 'where'; s.notes = ['Column(age) = 20, Literal(20) = 20', '20 >= 20 → 참 → 결과에 추가'];
+      s.out = {msg:'1행', rows:[[1, 'kim', 20]]}; } },
+
+  { phase:'UPDATE · DELETE', title:"UPDATE ①: 대상을 모으고, 검사하고, 새 행을 인코딩",
+    what:"실행기가 먼저 대상을 모은다: 모든 페이지를 훑어 <code>id = 1</code>이 참인 행 → (페이지 1, 슬롯 0). SET 값을 검사한다: 'kimchi' 6글자 ≤ 20 ✓. 새 행을 인코딩한다: 1 + 4 + (2 + 6) + 4 = <b>17바이트</b>. 파일은 아직 건드리지 않았다.",
+    why:'"전부 모으고 검사한 뒤에 쓴다"는 2단계다(설계 1.9). 50번째 행에서 값 검사가 실패했는데 앞의 49행이 이미 바뀌어 있는 일을 막는다.',
+    ifnot:'훑으면서 바로 고치면, 뒤 페이지로 옮겨진 행을 탐색이 다시 만나 두 번 고칠 수 있다.',
+    code:C('encode', 'v'),
+    apply(s){ s.stage = 'encode'; s.sql = SQL.update; s.tokens = lex(SQL.update); s.out = null;
+      s.ast = {n:'Update', c:[N('table: users'), {n:'set', c:[{n:"name = Literal('kimchi')", leaf:1}]}, {n:'where', c:[cmp('=', 'id', 1)]}]};
+      s.row = [1, 'kimchi', 20]; s.bytes = {title:'새 행 바이트 (17바이트, 예전에는 14바이트)', groups:KIMCHI};
+      s.notes = ['대상: (페이지 1, 슬롯 0) — id 1 = 1 → 참', "name: 'kimchi' 6글자 ≤ 20 ✓", '새 길이 17 > 예전 길이 14']; } },
+
+  { phase:'UPDATE · DELETE', title:'UPDATE ②: 슬롯 번호는 그대로, offset만 바뀐다',
+    what:'새 행 17바이트는 예전 자리 14바이트에 들어가지 않는다. 같은 페이지 빈 공간은 8178 − 20 = 8158 ≥ 17 ✓. free_end를 8178 − 17 = <b>8161</b>로 당기고 8161~8177에 새 행을 쓴다. 슬롯 0을 (8161, 17)로 고친다. 예전 바이트 8178~8191(14바이트)은 <b>죽은 공간</b>이 된다.',
+    why:'바뀐 것은 슬롯 <b>안의 값</b>이지 슬롯 <b>번호</b>가 아니다. 이 행은 여전히 (페이지 1, 슬롯 0)이다. 그래서 (페이지, 슬롯)을 기억하는 인덱스를 고칠 필요가 없다. 페이지 + 슬롯 설계를 고른 이유가 이것이다.',
+    ifnot:'이 페이지에도 자리가 없으면 다른 페이지로 옮긴다[확정]: 예전 슬롯에 삭제 표시를 하고, 같은 id로 마지막 페이지에 삽입한다. 이때는 (페이지, 슬롯)이 바뀌므로 Phase 2에서 인덱스를 고쳐야 한다.',
+    code:C('pageUpdate', 'ab'),
+    apply(s){ s.stage = 'page'; const p = s.page; p.freeEnd = p.freeEnd - flat(KIMCHI).length;
+      p.regions[0].kind = 'dead'; p.regions.push({from:p.freeEnd, len:17, kind:'row', label:"행 (id 1, 'kimchi')"});
+      p.slots[0] = {off:p.freeEnd, len:17}; p.disk = '파일에 다시 씀 (파일 위치 8192)'; s.out = {msg:'1행 수정'}; } },
+
+  { phase:'UPDATE · DELETE', title:'DELETE: 슬롯에 "삭제됨" 표시만 한다',
+    what:'대상을 모은다 → (페이지 1, 슬롯 0). 슬롯 0의 offset을 <b>0</b>으로 쓴다. 0은 "삭제됨"이라는 뜻이다. 슬롯 자체는 남고 slot_count도 1 그대로다. 행 바이트 8161~8177도 지우지 않아 죽은 공간이 된다. checksum을 다시 계산하고 페이지를 다시 쓴다.',
+    why:'슬롯을 빼면 뒤 슬롯들의 번호가 하나씩 당겨지고, 인덱스가 기억한 (페이지, 슬롯)이 다른 행을 가리키게 된다. 그래서 번호는 유지하고 표시만 한다.',
+    ifnot:'죽은 공간(여기서는 14 + 17 = 31바이트)은 그대로 남는다. 설계[확정]: 삭제된 슬롯은 재사용하지 않고, 당겨 모음은 UPDATE에서 "빈 공간 합은 충분한데 연속 공간이 모자랄 때"만 한다.',
+    code:C('pageDelete', 'a'),
+    apply(s){ s.sql = SQL.del; s.tokens = lex(SQL.del); s.ast = {n:'Delete', c:[N('table: users'), {n:'where', c:[cmp('=', 'id', 1)]}]};
+      s.row = null; s.bytes = null; s.notes = ['대상: (페이지 1, 슬롯 0) — id 1 = 1 → 참'];
+      s.page.slots[0].off = 0; s.page.regions[1].kind = 'dead'; s.out = {msg:'1행 삭제'}; } },
+];
+
+/* ===== 누적 상태 계산 ===== */
+const states = [];
+steps.reduce((prev, st) => { const s = structuredClone(prev); st.apply(s); states.push(s); return s; }, initial);
+
+function esc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function codeHTML(lines){
+  return lines.map(l => { const i = l.indexOf('//');
+    return `<span class="ln${l.startsWith('!') ? ' hl' : ''}">` +
+      (i < 0 ? esc(l.replace(/^!/,'')) : esc(l.slice(0,i).replace(/^!/,'')) + `<span class="cm">${esc(l.slice(i))}</span>`) + '</span>'; }).join('');
+}
+
+const FLOW = [['lex','렉서'], ['parse','파서'], ['check','값 검사'], ['encode','인코딩'], ['page','페이지 · 슬롯'], ['file','파일'], ['read','읽기 · 디코딩'], ['where','WHERE']];
+
+// 페이지 8192바이트를 앞에서부터 구간으로 나눈다: 헤더 | 슬롯들 | 빈 공간 | 행 · 죽은 공간
+function segs(p){
+  const a = [{cls:'hdr', t:'헤더', r:[0, 15], lines:['16B']}];
+  p.slots.forEach((sl, i) => a.push({cls:'slot' + (sl.off === 0 ? ' del' : ''), t:'슬롯 ' + i, r:[16 + i * 4, 19 + i * 4],
+    lines:[sl.off === 0 ? 'offset 0 = 삭제됨' : `(${sl.off}, ${sl.len})`]}));
+  a.push({cls:'free', t:'빈 공간', r:[p.freeStart, p.freeEnd - 1], lines:[(p.freeEnd - p.freeStart) + 'B'], free:1});
+  [...p.regions].sort((x, y) => x.from - y.from).forEach(g =>
+    a.push({cls:g.kind, t:g.kind === 'dead' ? '죽은 공간' : g.label, r:[g.from, g.from + g.len - 1], lines:[g.len + 'B']}));
+  return a;
+}
+
+/* ===== 기대값 대조 (설계 문서 1.6의 표, 직접 계산한 값) ===== */
+console.assert(INS.length === 11 && INS.map(t => t.k).join(' ') === 'KEYWORD KEYWORD IDENT KEYWORD LPAREN STRING COMMA NUMBER RPAREN SEMICOLON EOF', 'INSERT 토큰');
+console.assert(lex(SQL.select).length === 10 && lex(SQL.select)[6].k === 'GE', 'SELECT 토큰');
+console.assert(flat(KIM).join(' ') === '00 00 00 00 01 00 03 6B 69 6D 00 00 00 14', 'kim 행 14바이트');
+console.assert(flat(KIMCHI).join(' ') === '00 00 00 00 01 00 06 6B 69 6D 63 68 69 00 00 00 14', 'kimchi 행 17바이트');
+states.forEach((s, i) => { if (!s.page) return; const a = segs(s.page);
+  a.forEach((g, j) => console.assert(g.r[0] === (j ? a[j - 1].r[1] + 1 : 0), '구간이 이어지지 않음', i, j));
+  console.assert(a[a.length - 1].r[1] === 8191, '페이지 끝이 8191이 아님', i); });
+{ const a = states[16], b = states[23], c = states[24];
+  console.assert(states[13].page.freeEnd - states[13].page.freeStart === 8176, '빈 페이지');
+  console.assert(a.page.freeStart === 20 && a.page.freeEnd === 8178 && a.page.slots[0].off === 8178 && a.page.slots[0].len === 14 && a.nextId === 2, 'INSERT 후');
+  console.assert(b.page.freeEnd === 8161 && b.page.slots[0].off === 8161 && b.page.slots[0].len === 17 && b.page.freeStart === 20, 'UPDATE 후');
+  console.assert(c.page.slots[0].off === 0 && c.page.slotCount === 1 && c.page.regions.every(g => g.kind === 'dead'), 'DELETE 후'); }
+
+function renderStage(s, prev){
+  const diff = get => prev && JSON.stringify(get(s)) !== JSON.stringify(get(prev)) ? ' changed' : '';
+  const empty = t => `<span class="empty">${t}</span>`;
+  const J = JSON.stringify;
+
+  const flow = `<div class="card panel"><div class="panel-title">흐름 지도 — 지금 일하는 단계</div>
+    <div class="flow">${FLOW.map(([k, t]) => `<span class="fnode${s.stage === k ? ' on' + diff(x => x.stage) : ''}">${t}</span>`).join('<span class="farrow">→</span>')}</div>
+    <p class="small muted" style="margin:8px 0 0">쓰기는 렉서 → 파서 → 값 검사 → 인코딩 → 페이지 · 슬롯 → 파일. 읽기는 렉서 → 파서 → 파일 → 읽기 · 디코딩 → WHERE.</p></div>`;
+
+  const fileTxt = (s.file.meta ? '0번 메타 (위치 0)' : '파일 없음') + (s.file.pages ? ' · 1번 데이터 (위치 8192)' : '');
+  const info = `<div class="card panel"><div class="panel-title">지금 문장 · 테이블 정보</div>
+    <div class="sqlnow${diff(x => x.sql)}">${s.sql ? esc(s.sql) : empty('아직 문장 없음')}</div>
+    <div class="stats" style="margin-bottom:0">
+      <div class="stat${diff(x => x.schema)}">스키마<b>${s.schema ? s.schema.map(c => `${c.name} ${c.type}${c.note ? '(' + c.note + ')' : ''}`).join(', ') : '없음'}</b></div>
+      <div class="stat${diff(x => x.nextId)}">nextId (메모리)<b>${s.nextId ?? '없음'}</b></div>
+      <div class="stat${diff(x => x.file)}">users.db<b>${fileTxt}</b></div>
+    </div></div>`;
+
+  const toks = `<div class="card panel"><div class="panel-title">토큰 목록 (렉서 결과) — 한 줄로 늘어선 배열${s.tokens.length ? ` · ${s.tokens.filter(t => t.k !== 'EOF').length}개` : ''}</div>
+    <div class="toks">${s.tokens.length ? s.tokens.map((t, i) =>
+      `<span class="tok ${t.k}${prev && J(prev.tokens[i]) !== J(t) ? ' changed' : ''}"><b>${t.k === 'EOF' ? '끝' : esc(t.t)}</b><span>${t.k}</span></span>`).join('') : empty('아직 없음')}</div></div>`;
+
+  const tree = (n, root) => `<li><span class="nd${root ? ' root' : n.leaf ? ' leaf' : ''}">${esc(n.n)}</span>${n.c ? `<ul>${n.c.map(c => tree(c)).join('')}</ul>` : ''}</li>`;
+  const ast = `<div class="card panel"><div class="panel-title">AST (파서 결과) — 부모-자식 트리</div>
+    ${s.ast ? `<ul class="tree${diff(x => x.ast)}">${tree(s.ast, true)}</ul>` : empty('아직 없음')}</div>`;
+
+  let rowH = '';
+  if (s.row) rowH += `<div class="table-wrap${diff(x => x.row)}"><table><tr><th>id</th><th>name</th><th>age</th></tr>
+    <tr><td>${s.row[0] === '?' ? empty('아직 없음') : s.row[0]}</td><td>'${esc(s.row[1])}'</td><td>${s.row[2]}</td></tr></table></div>`;
+  if (s.notes.length) rowH += `<ul class="notes${diff(x => x.notes)}">${s.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>`;
+  if (s.bytes) rowH += `<div class="panel-title" style="margin:16px 0 0">${esc(s.bytes.title)} · 지금 ${flat(s.bytes.groups).length}바이트</div>
+    <div class="bytes">${s.bytes.groups.map((g, i) => `<div class="bgroup"><div class="bcells${prev && prev.bytes && J(prev.bytes.groups[i]) === J(g) ? '' : (prev ? ' changed' : '')}">${
+      g.hex.map(h => `<span class="bcell">${h}</span>`).join('')}</div><div class="blabel">${esc(g.label)} · ${g.hex.length}B</div></div>`).join('')}</div>`;
+  const row = `<div class="card panel"><div class="panel-title">행: 값 → 바이트 (16진수 한 칸 = 1바이트)</div>${rowH || empty('아직 없음')}</div>`;
+
+  let pageH = empty('아직 데이터 페이지 없음');
+  if (s.page) { const p = s.page, a = segs(p), pk = prev && prev.page ? new Set(segs(prev.page).map(J)) : null;
+    const st = (label, get) => `<div class="stat${prev && prev.page ? diff(x => x.page && get(x.page)) : ''}">${label}<b>${get(p)}</b></div>`;
+    pageH = `<div class="stats" style="margin-top:0">${st('page_id', x => x.id)}${st('slot_count', x => x.slotCount)}${st('free_start', x => x.freeStart)}${st('free_end', x => x.freeEnd)}${st('빈 공간 = free_end − free_start', x => x.freeEnd - x.freeStart)}${st('상태', x => x.disk)}</div>
+      <div class="pg">${a.map(g => `<div class="seg ${g.cls}${prev && (!pk || !pk.has(J(g))) ? ' changed' : ''}"><b>${esc(g.t)}</b><span class="r">${g.r[0]}~${g.r[1]}</span>${g.lines.map(l => `<span class="r">${esc(l)}</span>`).join('')}${
+        g.free ? `<div class="ends"><span>free_start ${p.freeStart} · 슬롯이 자라는 쪽 ▸</span><span>◂ 행이 자라는 쪽 · free_end ${p.freeEnd}</span></div>` : ''}</div>`).join('')}</div>
+      <div class="legend"><span class="chip">헤더</span><span class="chip a">슬롯 (앞에서 뒤로)</span><span class="chip b">행 (뒤에서 앞으로)</span><span class="chip warn">삭제 · 죽은 공간</span></div>
+      <div class="panel-title" style="margin:16px 0 8px">슬롯표 (i번 슬롯 위치 = 16 + i × 4)</div>
+      ${p.slots.length ? `<div class="table-wrap${diff(x => x.page && x.page.slots)}"><table><tr><th>슬롯 번호</th><th>슬롯 위치</th><th>offset</th><th>length</th><th>뜻</th></tr>${p.slots.map((sl, i) =>
+        `<tr><td>${i}</td><td>${16 + i * 4}~${19 + i * 4}</td><td>${sl.off}</td><td>${sl.len}</td><td>${sl.off === 0 ? '삭제됨 (번호는 유지)' : `행이 ${sl.off}~${sl.off + sl.len - 1}에 있음`}</td></tr>`).join('')}</table></div>` : empty('슬롯 없음')}`; }
+  const page = `<div class="card panel"><div class="panel-title">1번 데이터 페이지 (8192바이트) — 칸 크기는 실제 비율이 아니다</div>${pageH}</div>`;
+
+  const out = `<div class="card panel"><div class="panel-title">사용자에게 돌아가는 결과</div><div class="${diff(x => x.out).trim()}">${s.out ? `<b>${esc(s.out.msg)}</b>` +
+    (s.out.rows ? `<div class="table-wrap" style="margin-top:8px"><table><tr><th>id</th><th>name</th><th>age</th></tr>${s.out.rows.map(r => `<tr><td>${r[0]}</td><td>${esc(r[1])}</td><td>${r[2]}</td></tr>`).join('')}</table></div>` : '')
+    : empty('아직 없음')}</div></div>`;
+
+  document.getElementById('stage').innerHTML = `<div class="stack">${flow}${info}<div class="two">${toks}${ast}</div>${row}${page}${out}</div>`;
+}
+
+/* ===== 컨트롤 ===== */
+const phaseNames = [...new Set(steps.map(s => s.phase))];
+document.getElementById('phases').innerHTML = phaseNames.map(p => `<button type="button" data-p="${p}">${p}</button>`).join('');
+document.getElementById('phases').onclick = e => { const p = e.target.dataset.p; if (p) { stop(); go(steps.findIndex(s => s.phase === p)); } };
+
+let idx = 0, timer = null;
+function go(i){
+  idx = Math.max(0, Math.min(steps.length - 1, i));
+  const st = steps[idx];
+  document.getElementById('stepCount').textContent = `${idx + 1} / ${steps.length}`;
+  document.getElementById('progressBar').style.width = `${(idx + 1) / steps.length * 100}%`;
+  document.querySelectorAll('#phases button').forEach(b => b.classList.toggle('on', b.dataset.p === st.phase));
+  document.getElementById('stepTitle').textContent = st.title;
+  document.getElementById('explain').innerHTML =
+    `<dt>무슨 일이</dt><dd>${st.what}</dd><dt>왜</dt><dd>${st.why}</dd>` +
+    (st.ifnot ? `<dt class="ifnot">안 하면</dt><dd>${st.ifnot}</dd>` : '');
+  const code = document.getElementById('stepCode');
+  code.hidden = !st.code.length; code.innerHTML = codeHTML(st.code);
+  renderStage(states[idx], idx > 0 ? states[idx - 1] : null);
+  document.getElementById('btnFirst').disabled = document.getElementById('btnPrev').disabled = idx === 0;
+  document.getElementById('btnNext').disabled = idx === steps.length - 1;
+}
+function stop(){ clearInterval(timer); timer = null; document.getElementById('btnPlay').textContent = '▶ 자동재생'; }
+document.getElementById('btnFirst').onclick = () => { stop(); go(0); };
+document.getElementById('btnPrev').onclick = () => { stop(); go(idx - 1); };
+document.getElementById('btnNext').onclick = () => { stop(); go(idx + 1); };
+document.getElementById('btnPlay').onclick = () => {
+  if (timer) return stop();
+  if (idx === steps.length - 1) go(0);
+  document.getElementById('btnPlay').textContent = '⏸ 일시정지';
+  timer = setInterval(() => idx >= steps.length - 1 ? stop() : go(idx + 1), 4500);
+};
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,textarea,select')) return;
+  if (e.key === 'ArrowRight') { stop(); go(idx + 1); }
+  if (e.key === 'ArrowLeft') { stop(); go(idx - 1); }
+});
+go(0);
+</script>
+</body>
+</html>
