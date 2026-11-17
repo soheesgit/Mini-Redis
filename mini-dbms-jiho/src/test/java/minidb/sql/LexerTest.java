@@ -119,6 +119,23 @@ class LexerTest {
     }
 
     @Test
+    void operatorBoundariesAreFixedByTests() {
+        assertEquals(List.of(IDENT, LT, GT, IDENT, EOF), types("a<  >b")); // 공백이 끼면 <> 가 아님
+        assertEquals(List.of(LE, GT, EOF), types("<=>")); // MySQL의 <=> 는 없음: <= 다음 >
+        assertEquals(List.of(NE, EQ, EOF), types("!==")); // != 다음 =
+        assertEquals(List.of(SEMICOLON, SEMICOLON, EOF), types(";;")); // 빈 문장은 파서가 판단
+    }
+
+    @Test
+    void backslashIsAPlainCharacterInStrings() {
+        // ANSI 방식: 이스케이프는 ''만. 'a\' 는 문자열 a\ 로 닫힘 (MySQL 기본이면 안 닫힌 따옴표)
+        List<Token> ts = Lexer.tokenize("'a\\' x");
+        assertEquals(List.of(STRING, IDENT, EOF), ts.stream().map(Token::type).toList());
+        assertEquals("a\\", ts.get(0).text());
+        assertEquals("50\\%", Lexer.tokenize("'50\\%'").get(0).text());
+    }
+
+    @Test
     void punctuation() {
         assertEquals(List.of(LPAREN, IDENT, COMMA, IDENT, RPAREN, SEMICOLON, EOF), types("(a,b);"));
     }

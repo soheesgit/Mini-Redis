@@ -37,6 +37,8 @@ DELETE FROM users WHERE age < 20;
 
 - 테이블은 `CREATE TABLE`로 정의한다 [확정]. 스키마는 그 테이블 파일의 0번 메타 페이지에 저장 (1.4)
 - 키워드는 대소문자 무관 (`select`, `TRUE`, `null` 모두 같음)
+- 문자열 이스케이프는 `''`만, `\`는 일반 글자 (ANSI 방식, MySQL 기본과 다름)
+- 식별자는 대소문자 무관으로 비교하고 쓴 모양은 보존, 테이블 파일 이름은 소문자 (MySQL 칸 이름과 같음)
 - 같지 않음은 `<>`와 `!=` 둘 다 받는다 (MySQL도 둘 다 지원)
 - WHERE가 없는 UPDATE · DELETE는 전체 행에 적용 (MySQL과 같음)
 - **id 칸 [확정]**: 모든 테이블 맨 앞에 `id INT`가 자동으로 붙는다. `CREATE TABLE`에 적지 않고, INSERT `VALUES`에서도 뺀다. 값은 nextId로 자동 부여. `SELECT *`에는 나온다. 수정(`SET id = ...`)은 거부
