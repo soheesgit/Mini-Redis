@@ -46,6 +46,11 @@ public final class Table implements AutoCloseable {
      * 이미 있으면 FileAlreadyExistsException
      */
     public static Table create(Path dir, String base, byte[] schemaBytes, boolean fsyncLog) throws IOException {
+        return create(dir, base, schemaBytes, fsyncLog, Faults.NONE);
+    }
+
+    public static Table create(Path dir, String base, byte[] schemaBytes, boolean fsyncLog, Faults faults)
+            throws IOException {
         Path db = dir.resolve(base + ".db"), tmp = dir.resolve(base + ".db.tmp");
         Files.deleteIfExists(tmp);
         if (Files.exists(db)) throw new FileAlreadyExistsException(db.toString());
@@ -55,7 +60,7 @@ public final class Table implements AutoCloseable {
             c.force(true);
         }
         syncDir(dir);
-        return open(dir, base, fsyncLog, Faults.NONE);
+        return open(dir, base, fsyncLog, faults);
     }
 
     /** 연다: 로그의 유효한 레코드를 다시 쓰고(복구), 모든 데이터 페이지를 검사하며 nextId를 구한다. 깨진 페이지가 남으면 StorageException */
