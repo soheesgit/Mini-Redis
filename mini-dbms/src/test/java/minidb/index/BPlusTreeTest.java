@@ -154,6 +154,20 @@ class BPlusTreeTest {
     }
 
     @Test
+    void rangeVisitorCanStopBeforeReadingTheRestOfTheLeaves() {
+        BPlusTree tree = new BPlusTree(3);
+        for (int id = 1; id <= 12; id++) tree.put(id, id);
+
+        List<Long> visited = new ArrayList<>();
+        tree.scanRange(2, 12, location -> {
+            visited.add(location);
+            return visited.size() < 4;
+        });
+
+        assertEquals(List.of(2L, 3L, 4L, 5L), visited);
+    }
+
+    @Test
     void 루트가_자라고_줄어든다() {
         BPlusTree t = new BPlusTree(3);
         for (int k = 1; k <= 4; k++) {

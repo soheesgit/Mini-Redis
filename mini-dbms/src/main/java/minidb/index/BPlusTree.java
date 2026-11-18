@@ -103,6 +103,19 @@ public final class BPlusTree {
 
     /** lo ≤ key ≤ hi 인 값을 키 오름차순으로 넘긴다 */
     public void range(int lo, int hi, LongConsumer out) {
+        scanRange(lo, hi, location -> {
+            out.accept(location);
+            return true;
+        });
+    }
+
+    @FunctionalInterface
+    public interface RangeVisitor<E extends Exception> {
+        boolean visit(long location) throws E;
+    }
+
+    /** 범위의 값을 키 오름차순으로 방문하고, 방문자가 false를 반환하면 멈춘다. */
+    public <E extends Exception> void scanRange(int lo, int hi, RangeVisitor<E> visitor) throws E {
         if (lo > hi) {
             return;
         }
@@ -115,7 +128,9 @@ public final class BPlusTree {
                 if (lf.keys[i] > hi) {
                     return;
                 }
-                out.accept(lf.vals[i]);
+                if (!visitor.visit(lf.vals[i])) {
+                    return;
+                }
             }
             lf = lf.next;
             i = 0;

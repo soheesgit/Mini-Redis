@@ -66,6 +66,26 @@ class IndexIntegrationTest {
     }
 
     @Test
+    void ascendingIdLimitCountsOnlyRowsThatPassWhere() throws IOException {
+        try (Database db = Database.open(dir, true)) {
+            run(db, "CREATE TABLE t (k INT);");
+            run(db, "INSERT INTO t VALUES (0), (NULL), (30), (0), (50), (60);");
+
+            assertEquals(List.of("1", "2"), text(run(db, "SELECT id FROM t ORDER BY id LIMIT 2;")));
+            assertEquals(List.of("30", "50"),
+                    text(run(db, "SELECT k FROM t WHERE k > 0 ORDER BY ID ASC LIMIT 2;")));
+            assertEquals(List.of("3", "5", "6"),
+                    text(run(db, "SELECT id FROM t WHERE k > 0 ORDER BY id LIMIT 9223372036854775807;")));
+            assertEquals(List.of(),
+                    text(run(db, "SELECT id FROM t WHERE id > 2147483647 ORDER BY id LIMIT 1;")));
+            assertEquals(List.of(),
+                    text(run(db, "SELECT id FROM t WHERE id BETWEEN 4 AND 3 ORDER BY id LIMIT 1;")));
+            assertEquals(List.of(), text(run(db, "SELECT id FROM t ORDER BY id LIMIT 0;")));
+            assertThrows(SqlException.class, () -> run(db, "SELECT missing FROM t ORDER BY id LIMIT 0;"));
+        }
+    }
+
+    @Test
     void movedRowsKeepTheirIdAndPhysicalOrderAcrossReopen() throws IOException {
         String big = "x".repeat(1500);
         try (Database db = Database.open(dir, true)) {
@@ -77,6 +97,7 @@ class IndexIntegrationTest {
             assertEquals(List.of("1|" + big), text(run(db, "SELECT id, s FROM t WHERE id = 1;")));
             assertEquals(List.of("2", "3", "4", "5", "6", "7", "1"),
                     text(run(db, "SELECT id FROM t WHERE id BETWEEN 1 AND 7;")));
+            assertEquals(List.of("1", "2"), text(run(db, "SELECT id FROM t ORDER BY id LIMIT 2;")));
 
             assertEquals(2, run(db, "UPDATE t SET k = 14 WHERE id BETWEEN 2 AND 3;").affected());
             assertEquals(List.of("2", "3"), text(run(db, "SELECT id FROM t WHERE k = 14;")));
@@ -87,6 +108,8 @@ class IndexIntegrationTest {
             assertEquals(List.of("1|" + big), text(run(db, "SELECT id, s FROM t WHERE id = 1;")));
             assertEquals(List.of(), text(run(db, "SELECT id FROM t WHERE id = 2;")));
             assertEquals(List.of("4", "5", "6", "7", "1"), text(run(db, "SELECT id FROM t WHERE id BETWEEN 1 AND 7;")));
+            assertEquals(List.of("1", "4"),
+                    text(run(db, "SELECT id FROM t WHERE id BETWEEN 1 AND 7 ORDER BY id LIMIT 2;")));
             run(db, "INSERT INTO t VALUES ('new', 8);");
             assertEquals(List.of("8|new"), text(run(db, "SELECT id, s FROM t WHERE id = 8;")));
         }

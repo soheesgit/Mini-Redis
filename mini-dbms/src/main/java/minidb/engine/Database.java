@@ -190,14 +190,23 @@ public final class Database implements AutoCloseable {
         List<Comparator<Object[]>> keys = new ArrayList<>();
         for (OrderBy o : sel.orderBy()) keys.add(order(column(schema, o.column()), o.desc()));
 
+        boolean limitById = sel.limit() != null && sel.orderBy().size() == 1
+                && sel.orderBy().getFirst().column().key().equals("id")
+                && !sel.orderBy().getFirst().desc();
         List<Object[]> out = new ArrayList<>();
-        new Pages(t).matching(where, (no, slot, row) -> out.add(row));
-        if (!keys.isEmpty()) {
-            Comparator<Object[]> cmp = keys.get(0);
-            for (int i = 1; i < keys.size(); i++) cmp = cmp.thenComparing(keys.get(i));
-            out.sort(cmp); // 안정 정렬: 같은 키는 저장 순서 유지
+        Pages pages = new Pages(t);
+        if (limitById) {
+            pages.firstById(where, sel.limit(), out);
+        } else {
+            pages.matching(where, (no, slot, row) -> out.add(row));
+            if (!keys.isEmpty()) {
+                Comparator<Object[]> cmp = keys.get(0);
+                for (int i = 1; i < keys.size(); i++) cmp = cmp.thenComparing(keys.get(i));
+                out.sort(cmp); // 안정 정렬: 같은 키는 저장 순서 유지
+            }
         }
-        List<Object[]> limited = sel.limit() == null ? out : out.subList(0, (int) Math.min(out.size(), sel.limit()));
+        List<Object[]> limited = sel.limit() == null || out.size() <= sel.limit()
+                ? out : out.subList(0, sel.limit().intValue());
         List<Object[]> rows = new ArrayList<>(limited.size());
         for (Object[] r : limited) {
             Object[] p = new Object[cols.length];
@@ -292,6 +301,19 @@ public final class Database implements AutoCloseable {
 
         void touch(int n) {
             touched.add(n);
+        }
+
+        void firstById(Where where, long limit, List<Object[]> rows) throws IOException {
+            if (limit == 0) return;
+            Where.IdRange range = where.idRange();
+            if (range == null) range = new Where.IdRange(Integer.MIN_VALUE, Integer.MAX_VALUE);
+            if (range.lo() > range.hi()) return;
+
+            Visitor collect = (page, slot, row) -> rows.add(row);
+            table.scanIdsWhile((int) range.lo(), (int) range.hi(), location -> {
+                visit(location, where, collect);
+                return rows.size() < limit;
+            });
         }
 
         void matching(Where where, Visitor visitor) throws IOException {

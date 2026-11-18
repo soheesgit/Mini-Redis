@@ -127,6 +127,10 @@ public final class Table implements AutoCloseable {
         idIndex().range(lo, hi, visitor);
     }
 
+    public void scanIdsWhile(int lo, int hi, BPlusTree.RangeVisitor<IOException> visitor) throws IOException {
+        idIndex().scanRange(lo, hi, visitor);
+    }
+
     private BPlusTree idIndex() throws IOException {
         if (idIndex == null) rebuildIdIndex();
         return idIndex;
