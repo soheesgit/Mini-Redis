@@ -1,0 +1,75 @@
+/* 대표 색 하나(토마토 레드)와 회색 3단계만 쓴다. 강조·버튼·1위·패널 수치가 모두 --brand 계열이다 */
+:root {
+  --brand: #e8553d;
+  --brand-strong: #c9432d;
+  --brand-soft: #fdeeea;
+  --brand-glow: rgba(232, 85, 61, 0.22);
+  --ink: #1d1d1f;
+  --sub: #6e6e73;
+  --line: #e8e8e6;
+  --bg: #f7f7f5;
+  --card: #ffffff;
+  --radius: 14px;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-family: 'Noto Sans KR', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--brand-glow); outline-offset: 2px; }
+
+.split {
+  display: grid; grid-template-columns: minmax(0, 640px) 420px; justify-content: center; align-items: start;
+  gap: 32px; min-height: 100vh; padding: 56px 24px;
+}
+
+/* 왼쪽: 투표 앱 */
+.app-pane { position: relative; }
+.vote-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 24px; }
+.vote h1 { margin: 0; font-size: clamp(30px, 4vw, 40px); font-weight: 900; letter-spacing: -0.03em; }
+
+.primary, .ghost, .menu-vote { border-radius: 10px; font-size: 14px; font-weight: 700; transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
+.primary { border: 0; background: var(--brand); color: #fff; padding: 0 20px; }
+.primary:hover { background: var(--brand-strong); }
+.ghost { border: 1px solid var(--line); background: var(--card); color: var(--sub); padding: 8px 14px; }
+.ghost:hover { border-color: var(--brand); color: var(--brand); }
+
+.add-form { display: flex; gap: 8px; }
+.add-form input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); }
+.add-form input:focus { border-color: var(--brand); outline: none; box-shadow: 0 0 0 4px var(--brand-glow); }
+.notice { min-height: 20px; margin: 8px 2px 16px; font-size: 13px; color: var(--sub); }
+.notice.error { color: var(--brand-strong); }
+
+.menu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.menu-row {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto 72px 36px; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 12px 12px 18px;
+  position: relative; /* 미끄러질 때 z-index로 겹침 순서를 정한다 */
+}
+.menu-rank { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--bg); color: var(--sub); font-size: 13px; font-weight: 700; }
+.menu-row.first .menu-rank { background: var(--brand); color: #fff; }
+.menu-name { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.menu-votes { font: 500 16px var(--mono); color: var(--sub); }
+.menu-row.first .menu-votes { color: var(--brand); }
+.menu-vote { height: 38px; border: 1px solid var(--brand); background: var(--card); color: var(--brand); }
+.menu-vote:hover { background: var(--brand); color: #fff; }
+.menu-remove { width: 36px; height: 38px; border: 0; border-radius: 10px; background: transparent; color: #b4b4b8; font-size: 20px; line-height: 1; }
+.menu-remove:hover { background: var(--bg); color: var(--ink); }
+.menu-empty { padding: 32px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--sub); }
+.vote-total, .app-foot { color: var(--sub); font-size: 13px; text-align: center; }
+.vote-total { margin-top: 16px; }
+.app-foot { margin-top: 40px; }
+.app-foot a { color: inherit; }
+
+@media (max-width: 1120px) {
+  .split { grid-template-columns: minmax(0, 640px); }
+}
+@media (max-width: 520px) {
+  .split { padding: 32px 16px; }
+  .vote-head { align-items: flex-start; }
+  .menu-row { grid-template-columns: 28px minmax(0, 1fr) auto 60px 32px; gap: 8px; padding: 10px; }
+}

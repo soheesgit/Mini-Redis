@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>오늘 점심 뭐 먹지?</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap">
+    <link rel="stylesheet" href="./src/app/vote.css">
+    <link rel="stylesheet" href="./demo.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main class="split">
+      <div class="app-pane">
+        <div id="vote-app"></div>
+      </div>
+      <aside class="demo-side">
+        <section class="system" aria-labelledby="system-title">
+          <header class="system-head">
+            <div>
+              <p>Mini DBMS · Mini Redis</p>
+              <h2 id="system-title">시스템 로그</h2>
+            </div>
+            <button type="button" class="ghost" id="history" disabled>과거 투표 찾기</button>
+          </header>
+          <p id="scenario-status" role="status">데모 서버에 연결하고 있어요.</p>
+          <div id="bench" class="bench" hidden>
+            <div><span>B+ 트리 인덱스</span><strong id="index-time">—</strong></div>
+            <div><span>전체 스캔</span><strong id="scan-time">—</strong></div>
+          </div>
+          <div id="requests" role="region" aria-label="실제 API 실행 내역" tabindex="0"></div>
+        </section>
+      </aside>
+    </main>
+  </body>
+</html>
