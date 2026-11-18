@@ -171,6 +171,7 @@ public final class Table implements AutoCloseable {
     }
 
     public byte[] readPage(int n) throws IOException {
+        faults.at("data.read", n);
         return pageFile.readPage(n);
     }
 

@@ -10,7 +10,7 @@ import java.util.HexFormat;
 import minidb.cache.RedisCache;
 import minidb.sql.Ast.*;
 
-/** 소희의 cache-aside 연동을 지호의 AST/Result 계약으로 이식. Database의 문장 잠금 안에서만 호출한다. */
+/** CLI의 선택적 캐시. 조회는 테이블 읽기 락 안에서 호출하고, 캐시 상태는 이 인스턴스의 락으로 보호한다. */
 final class QueryCache {
     static final long TTL_SECONDS = 60;
     static final int MAX_VALUE_BYTES = 1 << 20;
@@ -26,7 +26,7 @@ final class QueryCache {
         namespace = "dbms:v2:" + hash((dir.toString() + "\n" + zone.getId()).getBytes(StandardCharsets.UTF_8));
     }
 
-    Result select(Select select, String revision, Loader loader) throws IOException {
+    synchronized Result select(Select select, String revision, Loader loader) throws IOException {
         if (disabledReason != null) return loader.load();
         String key = namespace + ":" + revision + ":" + hash(canonical(select));
         try {
@@ -51,7 +51,7 @@ final class QueryCache {
         return result;
     }
 
-    String summary() {
+    synchronized String summary() {
         return "cache: " + (disabledReason == null ? "" : "off (" + disabledReason + "), ")
                 + "hits=" + hits + " misses=" + misses;
     }
