@@ -11,7 +11,10 @@ import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.SortedMap;
+import java.util.function.LongConsumer;
+import minidb.index.BPlusTree;
 import minidb.type.Schema;
 
 /**
@@ -29,6 +32,7 @@ public final class Table implements AutoCloseable {
     private final Schema schema;
     private final boolean fsyncLog;
     private final Faults faults;
+    private BPlusTree idIndex;
     private long nextId;
     private long txid;
     private boolean broken;
@@ -80,16 +84,8 @@ public final class Table implements AutoCloseable {
             });
             pf.force();
             wal.reset();
-            long maxId = 0;
-            for (int n = 1; n < pf.pageCount(); n++) {
-                DataPage p = DataPage.fromBytes(n, pf.readPage(n));
-                for (int s = 0; s < p.slotCount(); s++) {
-                    byte[] row = p.read(s);
-                    if (row != null) maxId = Math.max(maxId, (Integer) schema.decode(row)[0]);
-                }
-            }
             Table t = new Table(pf, wal, schema, fsyncLog, faults);
-            t.nextId = maxId + 1;
+            t.nextId = t.rebuildIdIndex() + 1L;
             return t;
         } catch (java.io.UncheckedIOException e) {
             closeQuietly(pf, wal);
@@ -98,6 +94,46 @@ public final class Table implements AutoCloseable {
             closeQuietly(pf, wal);
             throw e;
         }
+    }
+
+    /** WAL 복구 후 nextId와 인덱스를 같은 데이터 페이지 순회에서 구한다. */
+    private int rebuildIdIndex() throws IOException {
+        BPlusTree rebuilt = new BPlusTree();
+        int maxId = 0;
+        int pageCount = pageFile.pageCount();
+        for (int no = 1; no < pageCount; no++) {
+            DataPage page = DataPage.fromBytes(no, pageFile.readPage(no));
+            for (int slot = 0; slot < page.slotCount(); slot++) {
+                byte[] row = page.read(slot);
+                if (row == null) continue;
+                if (!(schema.decode(row)[0] instanceof Integer id) || id <= 0) {
+                    throw new StorageException(no, "올바르지 않은 행 ID (슬롯 " + slot + ")");
+                }
+                int size = rebuilt.size();
+                rebuilt.put(id, BPlusTree.loc(no, slot));
+                if (rebuilt.size() == size) throw new StorageException(no, "중복 행 ID: " + id);
+                maxId = Math.max(maxId, id);
+            }
+        }
+        idIndex = rebuilt;
+        return maxId;
+    }
+
+    public long findId(int id) throws IOException {
+        return idIndex().get(id);
+    }
+
+    public void scanIds(int lo, int hi, LongConsumer visitor) throws IOException {
+        idIndex().range(lo, hi, visitor);
+    }
+
+    public void scanIdsWhile(int lo, int hi, BPlusTree.RangeVisitor<IOException> visitor) throws IOException {
+        idIndex().scanRange(lo, hi, visitor);
+    }
+
+    private BPlusTree idIndex() throws IOException {
+        if (idIndex == null) rebuildIdIndex();
+        return idIndex;
     }
 
     /** 복구가 끝난 페이지 내용의 버전. 파일 시각·크기에 의존하지 않아 같은 크기의 UPDATE도 구분한다.
@@ -144,11 +180,29 @@ public final class Table implements AutoCloseable {
     }
 
     /**
+     * 페이지 이미지만 받는 호출은 다음 조회에서 새 데이터로 인덱스를 재구축한다.
+     */
+    public void commit(SortedMap<Integer, byte[]> images) throws IOException {
+        commitPages(images);
+        idIndex = null;
+    }
+
+    /** 페이지 커밋 성공 후 행 위치를 갱신한다. 삭제는 BPlusTree.NONE으로 표시한다. */
+    public void commit(SortedMap<Integer, byte[]> images, Map<Integer, Long> positions) throws IOException {
+        commitPages(images);
+        if (idIndex == null) return;
+        positions.forEach((id, position) -> {
+            if (position == BPlusTree.NONE) idIndex.remove(id);
+            else idIndex.put(id, position);
+        });
+    }
+
+    /**
      * 바뀐 페이지들을 한 트랜잭션으로 반영한다 (키 = 페이지 번호, 오름차순 = 파일 끝 붙이기 규칙).
      * 로그에 쓰다 실패하면 반쯤 쓴 레코드를 잘라내고 던진다 (아무 일도 없었던 것). 데이터 쓰기에서 실패하면
      * 커밋은 로그에 있으니 broken으로 표시하고, 다시 열 때 복구된다.
      */
-    public void commit(SortedMap<Integer, byte[]> images) throws IOException {
+    private void commitPages(SortedMap<Integer, byte[]> images) throws IOException {
         if (broken) throw new IOException("깨진 테이블입니다: 닫고 다시 열어 복구하세요");
         long start = wal.size();
         try {

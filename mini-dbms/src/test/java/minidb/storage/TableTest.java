@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import minidb.index.BPlusTree;
 import minidb.sql.Ast.CreateTable;
 import minidb.sql.Parser;
 import minidb.type.Schema;
@@ -78,6 +79,18 @@ class TableTest {
         try (Table t = reopen()) {
             assertEquals(List.of(1, 2), ids(t));
             assertEquals(3, t.nextId());
+        }
+    }
+
+    @Test
+    void pageOnlyCommitCannotLeaveAStaleIndex() throws IOException {
+        try (Table t = create()) {
+            assertEquals(BPlusTree.NONE, t.findId(1));
+            t.commit(imgs(page(1, 1, 2)));
+            assertEquals(BPlusTree.loc(1, 1), t.findId(2));
+            t.commit(imgs(page(1, 2)));
+            assertEquals(BPlusTree.NONE, t.findId(1));
+            assertEquals(BPlusTree.loc(1, 0), t.findId(2));
         }
     }
 
