@@ -6,46 +6,32 @@
 
 </div>
 
-## 0:00–0:20 · 내가 맡은 부분
+## 점심 투표 시연
 
-Mini Redis를 직접 구현하고, 같은 API에서 캐시 사용 전후를 비교하는 방법을 만들었습니다. Mini DBMS에서는 Redis HTTP 연동, B+ 트리 실험과 단건 조회 개선, HTTP 서버와 테이블별 병렬 실행을 작업했습니다.
+![김치찌개가 13표로 1위에 오른 점심 투표 화면과 DBMS·Redis 시스템 로그](docs/presentation/lunch-vote.jpg)
 
-## 0:20–1:00 · 점심 투표 시연
+## Mini Redis 구현과 성능
 
-![실제 점심 투표 화면. 김치찌개가 13표로 1위에 올랐고 오른쪽 시스템 로그에 SQL UPDATE, Redis DEL, MISS, DBMS SELECT, 캐시 저장이 차례로 표시된다.](docs/presentation/lunch-vote.jpg)
+![상품 API의 응답 시간 중앙값. BYPASS 58.5 ms, HIT 2.24 ms](docs/presentation/redis-benchmark.png)
 
-| 화면에서 하는 일 | 시스템 로그 |
-| --- | --- |
-| **초기화 후 페이지 새로고침** | Redis `MISS` → DBMS `SELECT` → 캐시 저장 |
-| **60초 안에 한 번 더 새로고침** | Redis `HIT` |
-| **김치찌개에 한 표** | DBMS `UPDATE` → 이전 순위 캐시 삭제 → `MISS` → 새 순위 조회와 저장. 김치찌개가 **13표로 1위**에 올라갑니다. |
+해시 테이블로 `SET`·`GET`·`DEL`과 TTL을 구현했습니다. 팀 버전은 전용 스레드에서 저장소를 다루고, 해시 테이블을 확장할 때는 버킷을 조금씩 옮깁니다.
 
-[데모 실행 및 데이터 준비](lunch-demo/README.md#발표-전-준비)
+응답에 50ms 지연을 둔 상품 API에서 캐시 사용 여부를 바꿔 중앙값을 비교했습니다. 응답의 `X-Cache` 헤더로 실제 경로를 확인했습니다.
 
-## 1:00–2:00 · Mini Redis 구현과 성능
+## Mini DBMS와 HTTP 병렬 실행
 
-![같은 상품 API의 응답 시간 중앙값 비교. 캐시 우회 BYPASS 58.5ms, 캐시 HIT 2.24ms. 원본에는 요청당 50ms 지연을 주고 동시 요청 50개로 측정했다.](docs/presentation/redis-benchmark.png)
+![A 쓰기가 멈춘 동안 B 요청은 먼저 응답했다. A 조회는 커밋까지 기다린 뒤 새 값 20을 반환했다.](docs/presentation/dbms-concurrency.png)
 
-해시 테이블로 `SET`·`GET`·`DEL`과 TTL을 구현했습니다. 팀 버전은 전용 스레드가 저장소를 다루고, 테이블 확장이 필요하면 버킷을 조금씩 옮깁니다.
+행은 **8KB 페이지**에 저장하고, 변경 사항을 WAL에 먼저 기록해 재시작할 때 복구합니다. 테이블별 읽기·쓰기 잠금으로 같은 테이블의 조회끼리 함께 실행할 수 있게 했습니다.
 
-상품 API에서 캐시 사용 여부만 바꿔 비교하고, 응답의 `X-Cache` 헤더로 실제 경로를 확인했습니다. [측정 조건과 결과](mini-redis/검증결과.md#3-성능-캐시-사용-전후)
+## B+ 트리 조회 비교
 
-## 2:00–3:00 · Mini DBMS와 HTTP 병렬 실행
+![이메일 전체 스캔 73.6 ms, ID B+ 트리 조회 약 0.09 ms](docs/presentation/bplus-benchmark.png)
 
-![HTTP 동시성 테스트 순서. A 테이블 쓰기를 멈춘 동안 B 테이블의 INSERT와 SELECT가 먼저 응답했다. A 테이블의 SELECT는 A 커밋 뒤 새 값 20을 반환했다.](docs/presentation/dbms-concurrency.png)
+B+ 트리는 **ID를 페이지 번호와 슬롯 위치에 연결**합니다. 수치는 Phase 2 초기 구현에서 Redis 없이 100만 행 중 같은 행을 조회한 시간의 중앙값입니다.
 
-SQL을 파싱하고 행을 **8KB 페이지**에 저장합니다. 변경 사항을 WAL에 먼저 기록해, 프로세스가 중간에 꺼져도 다시 열 때 복구할 수 있습니다.
+## 협업과 머지
 
-HTTP SQL 워커가 테이블별 읽기·쓰기 잠금으로 요청을 처리합니다. 같은 테이블의 조회는 함께 실행할 수 있고, 쓰기 중 들어온 조회는 커밋된 값을 읽습니다. [HTTP 동시성 테스트](mini-dbms/src/test/java/minidb/api/QueryServerTest.java)
+![팀 Redis의 캐시 비교와 만료 키 테스트, 지호의 SQL 엔진과 소희의 Redis 연동, B+ 트리의 범위 조회와 삭제 테스트](docs/presentation/collaboration.png)
 
-## 3:00–3:30 · B+ 트리 조회 비교
-
-![Phase 2 초기 구현의 100만 행 조회 비교. 이메일 전체 스캔은 73.6ms, ID B+ 트리 조회는 약 0.09ms. Redis 없이 같은 행을 조회해 비교했다.](docs/presentation/bplus-benchmark.png)
-
-B+ 트리는 **ID를 페이지 번호와 슬롯 위치에 연결**합니다. 수치는 소희가 처음 구현한 Phase 2 버전 `4372f06`에서 잰 값입니다. 데모의 **과거 투표 찾기**에서는 현재 팀 버전으로 100만 건을 조회해 인덱스와 전체 스캔의 실제 시간을 비교할 수 있습니다. [벤치마크 재현 방법과 결과](mini-dbms/README.md#100만-행-벤치마크)
-
-## 3:30–4:00 · 협업과 머지
-
-![기능 단위 병합. 팀 Redis에 캐시 비교 방식과 만료 키 테스트를 반영했다. 지호의 SQL 엔진에 소희의 Redis HTTP 연동을 붙였고, 지호의 B+ 트리에 소희의 ID LIMIT 최적화를 반영했다.](docs/presentation/collaboration.png)
-
-각자 만든 결과를 비교한 뒤 **기능과 테스트를 함께 합쳤습니다.** 캐시가 만료된 뒤의 동작, 인덱스 범위 순회와 삭제 반영, `ORDER BY id LIMIT` 조기 종료를 검증했습니다. [Redis 병합 검증](mini-redis/검증결과.md) · [DBMS 인덱스 테스트](mini-dbms/src/test/java/minidb/engine/IndexIntegrationTest.java)
+각자 만든 코드를 비교해 기능과 테스트를 함께 합쳤습니다.
