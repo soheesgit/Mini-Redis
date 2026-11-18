@@ -12,7 +12,7 @@ import java.util.function.LongConsumer;
  *
  * <p>차수 o: 노드당 키 최대 o개, 루트가 아니면 최소 o/2개. 안쪽 노드는 자식이 키 수 + 1개.
  * 구분 키 sep[i]: 자식 i의 키는 모두 sep[i-1] ≤ key < sep[i].
- * 동시성은 다루지 않는다 (실행기가 이미 synchronized).
+ * 동시 읽기와 쓰기의 조율은 실행기의 테이블별 락이 맡는다.
  */
 public final class BPlusTree {
 

@@ -3,14 +3,14 @@ package minidb.storage;
 import java.io.IOException;
 
 /**
- * 테스트가 쓰기 도중에 I/O 실패(또는 죽음)를 흉내 내는 갈고리. 인스턴스마다 따로 달아서(전역 상태 없음) 병렬 테스트가 서로 안 건드린다.
- * 지점: "wal.half"(로그 레코드 앞 절반만 씀), "wal.write"(레코드를 다 썼고 fsync 전), "data.write"(데이터 페이지 i번째를 쓰기 전)
+ * 인스턴스별 저장소 테스트 지점. 로그 중간은 "wal.half", fsync 전은 "wal.write",
+ * 실행기의 페이지 읽기 전은 "data.read", 커밋 중 페이지 쓰기 전은 "data.write"다.
  */
 @FunctionalInterface
 public interface Faults {
 
     Faults NONE = (point, i) -> {};
 
-    /** 실패시키려면 IOException을 던진다. i는 "data.write"에서만 의미 있다 (그 커밋의 몇 번째 페이지인지) */
+    /** 읽을 페이지 번호 또는 커밋 내 쓰기 순번을 받는다. I/O 실패는 IOException을 던져 흉내 낸다. */
     void at(String point, int i) throws IOException;
 }

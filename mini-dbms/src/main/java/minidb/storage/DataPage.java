@@ -2,10 +2,11 @@ package minidb.storage;
 
 import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
+import minidb.type.Schema;
 
 /**
  * 데이터 페이지 8192B (설계 1.5). 헤더 16B, 슬롯 4B는 앞(16)부터, 행은 뒤(8192)부터 채운다.
- * 행 내용은 모른다: byte[] 그대로 넣고 꺼낸다 (행 인코딩은 minidb.type).
+ * 슬롯은 행 바이트를 보관한다. 행 인코딩과 디코딩은 Schema가 맡는다.
  *
  * <pre>
  * 헤더: 0 page_id 4B | 4 slot_count 2B | 6 free_start 2B | 8 free_end 2B | 10 flags 2B | 12 checksum 4B
@@ -46,6 +47,12 @@ public final class DataPage {
     public static DataPage fromBytes(int pageId, byte[] image) {
         verify(pageId, image);
         return new DataPage(image.clone());
+    }
+
+    /** 페이지 파일에서 새로 읽은 전용 배열을 검증한 뒤 소유한다. */
+    static DataPage fromOwnedBytes(int pageId, byte[] image) {
+        verify(pageId, image);
+        return new DataPage(image);
     }
 
     /** checksum과 page_id를 확인한다. 틀리면 StorageException (페이지 번호 포함) */
@@ -111,6 +118,13 @@ public final class DataPage {
         byte[] row = new byte[length(slot)];
         buf.get(off, row);
         return row;
+    }
+
+    /** 삭제된 슬롯은 null. 살아 있는 행은 페이지 배열에서 바로 디코딩한다. */
+    public Object[] decodeRow(int slot, Schema schema) {
+        checkSlot(slot);
+        int off = offset(slot);
+        return off == 0 ? null : schema.decode(buf.array(), off, length(slot));
     }
 
     /** 삭제 표시: offset = 0. 슬롯 번호와 행 바이트는 그대로 둔다 (죽은 공간) */

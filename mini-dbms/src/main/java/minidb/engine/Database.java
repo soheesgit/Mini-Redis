@@ -1,6 +1,11 @@
 package minidb.engine;
 
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.WRITE;
+
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -14,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.LongStream;
 import minidb.cache.RedisCache;
 import minidb.index.BPlusTree;
@@ -36,21 +43,34 @@ import minidb.type.Values;
  * 데이터 폴더 하나 = 데이터베이스 하나. 문장을 받아 실행한다 (설계 1.9).
  * 문장 하나 = 커밋 하나: 바뀐 페이지를 메모리 복사본에 모아 두었다가 {@link Table#commit}으로 한 번에 반영하므로
  * 문장은 전부 적용되거나 전혀 적용되지 않는다. 테이블은 처음 쓸 때 열어 캐시한다 (닫으면 체크포인트).
- * 한 번에 한 문장만 실행한다 (synchronized): 동시 실행·잠금은 이 단계의 범위 밖.
+ * 같은 테이블의 SELECT는 읽기 락을 공유하고, 생성·복구·쓰기는 쓰기 락으로 직렬화한다.
  */
 public final class Database implements AutoCloseable {
 
-    private QueryCache cache;
+    // 같은 JVM에서는 이미 잠근 파일의 두 번째 채널을 열지 않는다.
+    private static final Set<Path> OPEN_DIRECTORIES = ConcurrentHashMap.newKeySet();
+
+    private final QueryCache cache;
     private final Path dir;
     private final boolean fsyncLog;
     private final Faults faults;
+    private final FileChannel directoryLock;
     private final ZoneId zone = ZoneId.systemDefault();
-    private final Map<String, Table> tables = new HashMap<>();
+    private final Map<String, TableSlot> tables = new ConcurrentHashMap<>();
+    private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
+    private boolean closed;
 
-    private Database(Path dir, boolean fsyncLog, Faults faults) {
+    private static final class TableSlot {
+        final ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+        Table table;
+    }
+
+    private Database(Path dir, boolean fsyncLog, Faults faults, FileChannel directoryLock, RedisCache redis) {
         this.dir = dir;
         this.fsyncLog = fsyncLog;
         this.faults = faults;
+        this.directoryLock = directoryLock;
+        this.cache = redis == null ? null : new QueryCache(redis, dir, zone);
     }
 
     public static Database open(Path dir, boolean fsyncLog) throws IOException {
@@ -59,59 +79,137 @@ public final class Database implements AutoCloseable {
 
     /** Redis는 선택 사항이다. 기존 open은 환경변수와 무관하게 캐시 없이 동작한다. */
     public static Database openCached(Path dir, boolean fsyncLog, RedisCache redis) throws IOException {
-        Database db = open(dir, fsyncLog);
-        if (redis != null) db.cache = new QueryCache(redis, dir.toRealPath(), db.zone);
-        return db;
+        return open(dir, fsyncLog, Faults.NONE, redis);
     }
 
-    public synchronized String cacheSummary() {
+    public String cacheSummary() {
         return cache == null ? null : cache.summary();
     }
 
     /** 테스트가 쓰기 실패를 흉내 낼 때 */
     public static Database open(Path dir, boolean fsyncLog, Faults faults) throws IOException {
+        return open(dir, fsyncLog, faults, null);
+    }
+
+    private static Database open(Path dir, boolean fsyncLog, Faults faults, RedisCache redis) throws IOException {
         Files.createDirectories(dir);
-        return new Database(dir, fsyncLog, faults);
+        Path realDir = dir.toRealPath();
+        String busy = "이미 사용 중인 데이터 폴더: " + realDir;
+        if (!OPEN_DIRECTORIES.add(realDir)) throw new IOException(busy);
+        FileChannel channel = null;
+        try {
+            channel = FileChannel.open(realDir.resolve(".minidb.lock"), CREATE, WRITE);
+            try {
+                if (channel.tryLock() == null) throw new IOException(busy);
+            } catch (OverlappingFileLockException e) {
+                throw new IOException(busy, e);
+            }
+            return new Database(realDir, fsyncLog, faults, channel, redis);
+        } catch (IOException | RuntimeException | Error e) {
+            try {
+                if (channel != null) channel.close();
+            } catch (IOException closeError) {
+                e.addSuppressed(closeError);
+            } finally {
+                OPEN_DIRECTORIES.remove(realDir);
+            }
+            throw e;
+        }
     }
 
     public ZoneId zone() {
         return zone;
     }
 
-    public synchronized Result execute(Statement st) throws IOException {
-        String key = switch (st) {
-            case CreateTable s -> s.table().key();
-            case Insert s -> s.table().key();
-            case Select s -> s.table().key();
-            case Update s -> s.table().key();
-            case Delete s -> s.table().key();
+    public Result execute(Statement st) throws IOException {
+        Name name = switch (st) {
+            case CreateTable s -> s.table();
+            case Insert s -> s.table();
+            case Select s -> s.table();
+            case Update s -> s.table();
+            case Delete s -> s.table();
         };
+        var active = lifecycle.readLock();
+        active.lock();
+        try {
+            if (closed) throw new IOException("데이터베이스가 닫혔습니다");
+            TableSlot slot = tables.computeIfAbsent(name.key(), key -> new TableSlot());
+            if (st instanceof Select s) return selectLocked(s, slot);
+            return writeLocked(st, name, slot);
+        } finally {
+            active.unlock();
+        }
+    }
+
+    private Result selectLocked(Select st, TableSlot slot) throws IOException {
+        var read = slot.lock.readLock();
+        read.lock();
+        if (slot.table == null) {
+            read.unlock();
+            var write = slot.lock.writeLock();
+            write.lock();
+            try {
+                openTable(st.table(), slot);
+                read.lock();
+            } finally {
+                write.unlock();
+            }
+        }
+        try {
+            Table table = slot.table;
+            return cache == null ? select(st, table)
+                    : cache.select(st, table.contentRevision(), () -> select(st, table));
+        } finally {
+            read.unlock();
+        }
+    }
+
+    private Result writeLocked(Statement st, Name name, TableSlot slot) throws IOException {
+        var write = slot.lock.writeLock();
+        write.lock();
         try {
             return switch (st) {
-                case CreateTable s -> create(s);
-                case Insert s -> insert(s);
-                case Select s -> cache == null ? select(s)
-                        : cache.select(s, table(s.table()).contentRevision(), () -> select(s));
-                case Update s -> update(s);
-                case Delete s -> delete(s);
+                case CreateTable s -> create(s, slot);
+                case Insert s -> insert(s, openTable(name, slot));
+                case Update s -> update(s, openTable(name, slot));
+                case Delete s -> delete(s, openTable(name, slot));
+                case Select s -> throw new IllegalArgumentException("SELECT는 읽기 경로에서 실행해야 합니다");
             };
-        } catch (IOException e) {
-            // 쓰기가 끊긴 테이블은 버린다: 다음에 열 때 로그로 복구된다 (fail-stop)
-            Table t = tables.get(key);
-            if (t != null && t.isBroken()) {
-                t.abandon();
-                tables.remove(key);
+        } catch (IOException | RuntimeException e) {
+            // 대기 중인 요청도 같은 락을 사용해 다음에 테이블을 열고 복구한다.
+            if (slot.table != null && slot.table.isBroken()) {
+                slot.table.abandon();
+                slot.table = null;
             }
             throw e;
+        } finally {
+            write.unlock();
         }
     }
 
     @Override
-    public synchronized void close() throws IOException {
+    public void close() throws IOException {
+        var closing = lifecycle.writeLock();
+        closing.lock();
+        try {
+            if (closed) return;
+            closed = true;
+            try (var channel = directoryLock) {
+                closeTables();
+            } finally {
+                OPEN_DIRECTORIES.remove(dir);
+            }
+        } finally {
+            closing.unlock();
+        }
+    }
+
+    private void closeTables() throws IOException {
         IOException first = null;
-        for (Table t : tables.values()) {
+        for (TableSlot slot : tables.values()) {
+            if (slot.table == null) continue;
             try {
-                t.close();
+                slot.table.close();
             } catch (IOException e) {
                 if (first == null) first = e;
                 else first.addSuppressed(e);
@@ -134,35 +232,33 @@ public final class Database implements AutoCloseable {
         return sb.toString();
     }
 
-    private Table table(Name name) throws IOException {
-        Table t = tables.get(name.key());
-        if (t != null) return t;
+    /** 테이블 복구와 최초 공개는 같은 테이블의 쓰기 락 안에서 수행한다. */
+    private Table openTable(Name name, TableSlot slot) throws IOException {
+        if (slot.table != null) return slot.table;
         String base = fileBase(name.key());
         if (!Files.exists(dir.resolve(base + ".db"))) {
             throw new SqlException(name.line(), name.col(), "없는 테이블: " + name.text());
         }
-        t = Table.open(dir, base, fsyncLog, faults);
-        tables.put(name.key(), t);
-        return t;
+        slot.table = Table.open(dir, base, fsyncLog, faults);
+        return slot.table;
     }
 
     // ───── 문장 ─────
 
-    private Result create(CreateTable ct) throws IOException {
+    private Result create(CreateTable ct, TableSlot slot) throws IOException {
         Name name = ct.table();
         Schema schema = Schema.define(ct);
         SqlException exists = new SqlException(name.line(), name.col(), "이미 있는 테이블: " + name.text());
-        if (tables.containsKey(name.key())) throw exists;
+        if (slot.table != null) throw exists;
         try {
-            tables.put(name.key(), Table.create(dir, fileBase(name.key()), schema.toBytes(), fsyncLog, faults));
+            slot.table = Table.create(dir, fileBase(name.key()), schema.toBytes(), fsyncLog, faults);
         } catch (FileAlreadyExistsException e) {
             throw exists;
         }
         return new Result(null, null, 0, name.key());
     }
 
-    private Result insert(Insert ins) throws IOException {
-        Table t = table(ins.table());
+    private Result insert(Insert ins, Table t) throws IOException {
         Schema schema = t.schema();
         List<Object[]> rows = new ArrayList<>();
         for (var values : ins.rows()) rows.add(schema.checkInsert(values)); // 하나라도 틀리면 아무것도 안 씀
@@ -180,8 +276,7 @@ public final class Database implements AutoCloseable {
         return new Result(null, null, rows.size(), ins.table().key());
     }
 
-    private Result select(Select sel) throws IOException {
-        Table t = table(sel.table());
+    private Result select(Select sel, Table t) throws IOException {
         Schema schema = t.schema();
         Where where = Where.compile(sel.where(), schema, zone);
         int[] cols = sel.columns().isEmpty()
@@ -236,8 +331,7 @@ public final class Database implements AutoCloseable {
 
     private record Target(int page, int slot, Object[] row) {}
 
-    private Result update(Update up) throws IOException {
-        Table t = table(up.table());
+    private Result update(Update up, Table t) throws IOException {
         Schema schema = t.schema();
         Map<Integer, Object> sets = schema.checkUpdate(up.sets());
         Where where = Where.compile(up.where(), schema, zone);
@@ -260,8 +354,7 @@ public final class Database implements AutoCloseable {
         return new Result(null, null, targets.size(), up.table().key());
     }
 
-    private Result delete(Delete del) throws IOException {
-        Table t = table(del.table());
+    private Result delete(Delete del, Table t) throws IOException {
         Where where = Where.compile(del.where(), t.schema(), zone);
         Pages pages = new Pages(t);
         List<Target> targets = new ArrayList<>();
@@ -283,17 +376,21 @@ public final class Database implements AutoCloseable {
         private final Map<Integer, DataPage> loaded = new TreeMap<>();
         private final Set<Integer> touched = new HashSet<>();
         private final Map<Integer, Long> indexChanges = new HashMap<>();
-        private int pageCount;
+        private int pageCount = -1;
 
-        Pages(Table table) throws IOException {
+        Pages(Table table) {
             this.table = table;
-            this.pageCount = table.pageCount();
+        }
+
+        private int pageCount() throws IOException {
+            if (pageCount < 0) pageCount = table.pageCount();
+            return pageCount;
         }
 
         DataPage page(int n) throws IOException {
             DataPage p = loaded.get(n);
             if (p == null) {
-                p = DataPage.fromBytes(n, table.readPage(n));
+                p = table.readDataPage(n);
                 loaded.put(n, p);
             }
             return p;
@@ -319,7 +416,8 @@ public final class Database implements AutoCloseable {
         void matching(Where where, Visitor visitor) throws IOException {
             Where.IdRange range = where.idRange();
             if (range == null) {
-                for (int no = 1; no < pageCount; no++) {
+                int count = pageCount();
+                for (int no = 1; no < count; no++) {
                     DataPage p = page(no);
                     for (int slot = 0; slot < p.slotCount(); slot++) {
                         visit(p, slot, where, visitor);
@@ -344,15 +442,13 @@ public final class Database implements AutoCloseable {
         }
 
         private void visit(DataPage p, int slot, Where where, Visitor visitor) {
-            byte[] raw = p.read(slot);
-            if (raw == null) return;
-            Object[] row = table.schema().decode(raw);
-            if (Boolean.TRUE.equals(where.test(row))) visitor.row(p.pageId(), slot, row);
+            Object[] row = p.decodeRow(slot, table.schema());
+            if (row != null && Boolean.TRUE.equals(where.test(row))) visitor.row(p.pageId(), slot, row);
         }
 
         /** 마지막 페이지에, 안 들어가면 새 페이지(번호 = 지금 페이지 수)에 넣는다 */
         void append(int id, byte[] row) throws IOException {
-            int no = pageCount - 1;
+            int no = pageCount() - 1;
             int slot = no >= 1 ? page(no).insert(row) : -1;
             if (slot < 0) {
                 no = pageCount++;
