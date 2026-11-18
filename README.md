@@ -4,8 +4,6 @@
 
 **Mini React 점심 투표에 직접 만든 Java DBMS와 Redis를 연결했습니다.**
 
-[점심 투표 데모](lunch-demo/README.md) · [Mini DBMS](mini-dbms/README.md) · [Mini Redis](mini-redis/README.md)
-
 </div>
 
 ## 0:00–0:20 · 내가 맡은 부분
