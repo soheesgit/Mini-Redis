@@ -175,6 +175,10 @@ public final class Table implements AutoCloseable {
         return pageFile.readPage(n);
     }
 
+    public DataPage readDataPage(int n) throws IOException {
+        return DataPage.fromOwnedBytes(n, readPage(n));
+    }
+
     /** 이 테이블 인스턴스를 더 쓰면 안 되나 (끊긴 쓰기를 못 치웠음). 닫고 다시 열면 복구된다 */
     public boolean isBroken() {
         return broken;

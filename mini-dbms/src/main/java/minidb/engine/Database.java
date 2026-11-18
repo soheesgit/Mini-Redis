@@ -376,17 +376,21 @@ public final class Database implements AutoCloseable {
         private final Map<Integer, DataPage> loaded = new TreeMap<>();
         private final Set<Integer> touched = new HashSet<>();
         private final Map<Integer, Long> indexChanges = new HashMap<>();
-        private int pageCount;
+        private int pageCount = -1;
 
-        Pages(Table table) throws IOException {
+        Pages(Table table) {
             this.table = table;
-            this.pageCount = table.pageCount();
+        }
+
+        private int pageCount() throws IOException {
+            if (pageCount < 0) pageCount = table.pageCount();
+            return pageCount;
         }
 
         DataPage page(int n) throws IOException {
             DataPage p = loaded.get(n);
             if (p == null) {
-                p = DataPage.fromBytes(n, table.readPage(n));
+                p = table.readDataPage(n);
                 loaded.put(n, p);
             }
             return p;
@@ -412,7 +416,8 @@ public final class Database implements AutoCloseable {
         void matching(Where where, Visitor visitor) throws IOException {
             Where.IdRange range = where.idRange();
             if (range == null) {
-                for (int no = 1; no < pageCount; no++) {
+                int count = pageCount();
+                for (int no = 1; no < count; no++) {
                     DataPage p = page(no);
                     for (int slot = 0; slot < p.slotCount(); slot++) {
                         visit(p, slot, where, visitor);
@@ -437,15 +442,13 @@ public final class Database implements AutoCloseable {
         }
 
         private void visit(DataPage p, int slot, Where where, Visitor visitor) {
-            byte[] raw = p.read(slot);
-            if (raw == null) return;
-            Object[] row = table.schema().decode(raw);
-            if (Boolean.TRUE.equals(where.test(row))) visitor.row(p.pageId(), slot, row);
+            Object[] row = p.decodeRow(slot, table.schema());
+            if (row != null && Boolean.TRUE.equals(where.test(row))) visitor.row(p.pageId(), slot, row);
         }
 
         /** 마지막 페이지에, 안 들어가면 새 페이지(번호 = 지금 페이지 수)에 넣는다 */
         void append(int id, byte[] row) throws IOException {
-            int no = pageCount - 1;
+            int no = pageCount() - 1;
             int slot = no >= 1 ? page(no).insert(row) : -1;
             if (slot < 0) {
                 no = pageCount++;
