@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 회로 기판</title><link rel="stylesheet" href="base.css">
+<style>
+svg { width: 100%; height: auto; display: block; max-height: 70vh; }
+.chip rect { fill: #0a0f0c; stroke: #2c5a3c; stroke-width: 2; }
+.chip .pin { fill: #9a8a5a; }
+.chip text { fill: #b9c9bf; font: 13px ui-monospace, Menlo, monospace; text-anchor: middle; }
+.chip .s { fill: #4b6b57; font-size: 10px; }
+.chip.on rect { stroke: var(--a); filter: drop-shadow(0 0 10px var(--a)); }
+.trace { fill: none; stroke: #0f3a20; stroke-width: 6; stroke-linejoin: round; }
+.trace.on { stroke: #1d8f44; }
+.bit { font: bold 12px ui-monospace, Menlo, monospace; fill: var(--g); filter: drop-shadow(0 0 4px var(--g)); }
+#cap { padding: 6px 14px 60px; color: var(--c); white-space: pre-wrap; }
+</style></head>
+<body style="background:#03140a">
+<div class="title"><h1 class="glow">09 · circuit board</h1><span class="sub">구성 요소를 칩으로, 통로를 배선으로. 실제 바이트가 0과 1로 배선을 타고 흐른다</span></div>
+<svg viewBox="0 0 1000 400" id="pcb"></svg>
+<div id="cap"></div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const C = { CLIENT: [90, 90], SOCKET: [270, 90], HANDLER: [450, 90], QUEUE: [630, 90], EXECUTOR: [840, 200], MEMORY: [840, 340], AOF: [560, 320], DISK: [300, 320] };
+const NS = 'http://www.w3.org/2000/svg', svg = document.getElementById('pcb');
+const el = (t, a, p = svg) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); p.append(e); return e; };
+const path = (a, b) => { const [x1, y1] = C[a], [x2, y2] = C[b]; return x1 === x2 || y1 === y2 ? `M${x1},${y1} L${x2},${y2}` : `M${x1},${y1} L${x1},${(y1 + y2) / 2} L${x2},${(y1 + y2) / 2} L${x2},${y2}`; };
+const traces = {};
+for (const [a, b] of [['CLIENT', 'SOCKET'], ['SOCKET', 'HANDLER'], ['HANDLER', 'QUEUE'], ['QUEUE', 'EXECUTOR'], ['EXECUTOR', 'MEMORY'], ['EXECUTOR', 'AOF'], ['AOF', 'DISK'], ['EXECUTOR', 'HANDLER'], ['HANDLER', 'CLIENT']]) {
+  traces[a + b] = el('path', { class: 'trace', d: path(a, b) });
+}
+const chips = {};
+for (const n in C) {
+  const g = el('g', { class: 'chip' }); const [x, y] = C[n];
+  for (let i = -3; i <= 3; i++) { el('rect', { class: 'pin', x: x + i * 14 - 3, y: y - 34, width: 6, height: 8 }, g); el('rect', { class: 'pin', x: x + i * 14 - 3, y: y + 26, width: 6, height: 8 }, g); }
+  el('rect', { x: x - 64, y: y - 26, width: 128, height: 52, rx: 3 }, g);
+  el('text', { x, y: y - 1 }, g).textContent = n;
+  el('text', { x, y: y + 15, class: 's' }, g).textContent = { CLIENT: 'U1 browser', SOCKET: 'U2 tcp', HANDLER: 'U3 vthread', QUEUE: 'U4 fifo 1024', EXECUTOR: 'U5 single core', MEMORY: 'U6 hash RAM', AOF: 'U7 log', DISK: 'U8 flash' }[n];
+  chips[n] = g;
+}
+const bitsOf = (h) => h.bytes ? [...h.bytes.slice(0, 3)].map((x) => x.toString(2).padStart(8, '0')).join('').split('') : ['r', 'e', 'f']; // 바이트가 없으면 참조(ref)만 이동
+async function flow(h, wait) {
+  const p = traces[h.from + h.to] || traces[h.to + h.from]; if (!p) return;
+  p.classList.add('on');
+  const len = p.getTotalLength(), bits = bitsOf(h), nodes = bits.map((b) => { const t = el('text', { class: 'bit' }); t.textContent = b; return t; });
+  const reverse = !traces[h.from + h.to];
+  const start = performance.now(), ms = 1500;
+  while (true) {
+    const k = (performance.now() - start) / ms;
+    nodes.forEach((t, i) => { const kk = Math.max(0, Math.min(1, k - i * 0.025)); const pt = p.getPointAtLength((reverse ? 1 - kk : kk) * len); t.setAttribute('x', pt.x - 4); t.setAttribute('y', pt.y + 4); t.style.opacity = kk > 0 && kk < 1 ? 1 : 0; });
+    if (k > 1 + bits.length * 0.025) break; await wait(16);
+  }
+  nodes.forEach((t) => t.remove()); p.classList.remove('on');
+}
+player(async (r, wait) => {
+  document.getElementById('cnt').textContent = `요청 #${r.id} ${r.method} ${r.path}`;
+  for (const h of r.hops) {
+    if (h.from === h.to) continue;
+    Object.values(chips).forEach((c) => c.classList.remove('on'));
+    chips[h.from].classList.add('on');
+    document.getElementById('cap').textContent = `${h.from} → ${h.to}  ${h.label}\n# ${h.note}\n${h.bytes ? '흐르는 비트 = 실제 앞 3바이트: ' + bitsOf(h).join('').replace(/(.{8})/g, '$1 ') : '같은 프로세스 안: 바이트가 아니라 객체 참조(ref)만 넘어간다'}`;
+    await flow(h, wait);
+    chips[h.to].classList.add('on');
+    await wait(300);
+  }
+});
+</script></body></html>

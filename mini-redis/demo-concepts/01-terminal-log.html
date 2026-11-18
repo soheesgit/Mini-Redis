@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 터미널 로그</title><link rel="stylesheet" href="base.css">
+<style>
+#out { padding: 12px 14px 60px; white-space: pre-wrap; word-break: break-all; }
+.ln { display: block; }
+.arrow { color: var(--a); }
+.hex { color: var(--dim); padding-left: 22px; display: block; }
+.note { color: var(--c); padding-left: 22px; display: block; }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">01 · tail -f miniredis.trace</h1><span class="sub">요청이 지나가는 곳마다 로그 한 줄 + 실제 바이트가 타자 치듯 찍힌다</span></div>
+<div id="out"></div>
+<div class="hud">Space 멈춤 · → 다음 요청 · 데이터: 실제 서버 기록 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const out = document.getElementById('out');
+async function type(cls, text, wait, speed = 6) {
+  const s = document.createElement('span'); s.className = 'ln ' + cls; out.append(s);
+  for (let i = 0; i < text.length; i += 3) { s.textContent = text.slice(0, i + 3); if (i % 30 === 0) await wait(speed); }
+  s.textContent = text; scrollTo(0, document.body.scrollHeight);
+}
+player(async (r, wait, n) => {
+  document.getElementById('cnt').textContent = `요청 #${r.id} (${n % TR.reqs.length + 1}/${TR.reqs.length})`;
+  await type('wh', `\n$ curl -X ${r.method} http://127.0.0.1:8090${r.path}${r.value ? ` -d '${r.value}'` : ''}`, wait, 12);
+  for (const h of r.hops) {
+    await wait(350);
+    await type('', `[+${TR.us(h.t).padStart(9)}µs] ${h.from.padEnd(8)} ──▶ ${h.to.padEnd(8)} ${h.label}`, wait);
+    await type('note', `# ${h.note}`, wait, 2);
+    await type('hex', h.bytes ? TR.hex(h.bytes, 64) + '   │ ' + h.data.replace(/\r\n/g, '⏎').slice(0, 70) : '(참조 전달) ' + h.data, wait, 2);
+  }
+});
+</script></body></html>

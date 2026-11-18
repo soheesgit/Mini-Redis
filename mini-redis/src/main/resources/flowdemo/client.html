@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>미니 Redis 입력</title>
+<link rel="stylesheet" href="/ctl.css">
+</head>
+<body>
+<div class="bar"><h1>미니 Redis · 입력 콘솔</h1><span class="sp"></span><span id="srv" class="dim"></span></div>
+<div class="wrap">
+  <div class="panel open">
+    <button id="openMon">관제 화면 열기 (새 창) ↗</button>
+    <span class="dim">관제 화면을 옆에 띄워 두고 여기서 보내면, 요청이 흘러가는 모습이 그쪽에 나온다.</span>
+  </div>
+  <div class="panel">
+    <h2>요청 보내기</h2>
+    <div class="form">
+      <label>명령<select id="cmd"><option value="set">SET 저장</option><option value="get">GET 읽기</option><option value="del">DEL 지우기</option><option value="incr">INCR +1</option><option value="expire">EXPIRE TTL</option></select></label>
+      <label>키<input id="key" value="apple"></label>
+      <label>값<input id="val" value="red"></label>
+      <label>TTL(초)<input id="ttl" placeholder="없음"></label>
+      <button class="go send" id="send">보내기 ↵</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>한 번에 보내기</h2>
+    <div class="quick">
+      <button id="fruits">키 6개 차례로 (리해싱 보기)</button>
+      <button id="burst">INCR 50개 동시에 (배치 보기)</button>
+      <button id="ttlTest">TTL 2초 키 → 3초 뒤 GET (만료 보기)</button>
+      <button id="attack">다른 사이트에서 온 요청 (거절 보기)</button>
+      <button id="reset">데이터 초기화</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>보낸 요청 <span class="r dim" id="cnt"></span></h2>
+    <ul class="results" id="results"></ul>
+  </div>
+</div>
+<script src="/client.js" type="module"></script>
+</body>
+</html>

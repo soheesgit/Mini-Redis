@@ -1,0 +1,30 @@
+# Java build output and caches
+.gradle/
+build/
+target/
+/out/
+/bin/
+*.class
+
+# Local database files and configuration
+data/
+data-demo/
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# IDE and tool settings
+.idea/
+.vscode/
+.claude/
+*.iml
+.classpath
+.project
+.settings/
+
+# Logs, heap dumps, and OS files
+*.log
+*.hprof
+.DS_Store
+Thumbs.db

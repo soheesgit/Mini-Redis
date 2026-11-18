@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>미니 Redis 흐름 보기</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>미니 Redis 흐름 보기</h1>
+  <span id="srv" class="chip">서버 확인 중…</span>
+  <span class="spacer"></span>
+  <button id="reset" class="ghost">처음부터</button>
+  <a href="/client.html" class="link">입력 콘솔 →</a>
+  <a href="/monitor.html" class="link">관제 화면 →</a>
+  <a href="/advanced.html" class="link">고급 화면 →</a>
+</header>
+
+<form id="form" class="bar" autocomplete="off">
+  <select id="cmd">
+    <option value="set">SET 저장</option>
+    <option value="get">GET 읽기</option>
+    <option value="del">DEL 지우기</option>
+    <option value="incr">INCR 1 올리기</option>
+    <option value="expire">EXPIRE TTL 걸기</option>
+  </select>
+  <label>키 <input id="key" value="apple" size="10"></label>
+  <label id="valWrap">값 <input id="val" value="red" size="10"></label>
+  <label id="ttlWrap">TTL <input id="ttl" placeholder="없음" size="4">초</label>
+  <button class="primary" type="submit">보내기</button>
+  <button id="many" type="button" class="ghost" title="키 6개를 차례로 넣는다">키 여러 개 넣기</button>
+</form>
+
+<section class="card">
+  <div class="card-head">
+    <h2>① 처리 흐름</h2>
+    <span id="reqTitle" class="dim"></span>
+  </div>
+  <div id="flow" class="flow"></div>
+  <div class="say">
+    <div id="say" class="say-text">위에서 요청을 보내면, 요청이 어디를 거쳐 가는지 상자에 하나씩 불이 들어온다.</div>
+    <div class="ctrl">
+      <button id="prev" type="button">◀ 이전</button>
+      <span id="stepNo" class="dim"></span>
+      <button id="next" type="button">다음 ▶</button>
+      <button id="auto" type="button" class="ghost">자동 재생</button>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>② Redis 메모리 <span class="dim small">칸 하나 = 버킷 하나</span></h2>
+    <span id="memTitle" class="dim"></span>
+  </div>
+  <div id="grids" class="grids"></div>
+  <div class="legend dim small">
+    <span><i class="sw g0"></i>빈 칸</span><span><i class="sw g1"></i>키 1개</span><span><i class="sw g2"></i>2개</span><span><i class="sw g3"></i>3개 이상(충돌)</span>
+    <span><i class="sw hot"></i>방금 들어간 칸</span><span>⏱ TTL 있음</span>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>③ 자세히 <span id="detTitle" class="dim small"></span></h2>
+  </div>
+  <div id="detail" class="detail dim">칸을 누르거나 요청을 보내면 그 키가 어떻게 계산되고 어떤 모양으로 담기는지 나온다.</div>
+</section>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>

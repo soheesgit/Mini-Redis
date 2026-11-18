@@ -1,26 +1,25 @@
-# Mini Redis
+# Mini Redis + Mini DBMS
 
-> 해시 테이블을 직접 구현하고, 외부 API에서 사용할 수 있는 키-값 저장소를 만드는 프로젝트입니다.
+크래프톤 정글 팀 프로젝트입니다. 직접 만든 키-값 저장소(Mini Redis)와 파일 기반 SQL 처리기(Mini DBMS)가 한 레포에 있습니다.
 
-## 🎯 과제 목표
+## 폴더 구조
 
-- 해시 테이블을 활용해 데이터를 저장하고, 조회하고, 삭제할 수 있는 키-값 저장소를 구현합니다.
-- 외부 애플리케이션에서 이 저장소를 사용할 수 있도록 API를 제공합니다.
-- 언어와 프레임워크는 자유롭게 선택합니다. AI 등의 도구를 활용해 동작하는 결과물을 만드는 것을 우선하되, 해시 테이블을 어떻게 설계하고 구현했는지, 주요 함수가 어떻게 동작하는지 설명할 수 있어야 합니다.
+```
+.
+├── mini-redis/   Mini Redis 서버 (Maven, JDK 25). 해시 테이블·TTL·AOF/RDB·HTTP API
+├── mini-dbms/    Mini DBMS (Maven, JDK 25). SQL 처리기 CLI, 8KB 페이지·WAL·복구·WHERE
+├── scripts/      Redis와 DBMS 동시 실행
+└── study/        설계 문서와 학습 자료
+```
 
-## 🧩 설계할 때 살펴볼 점
+- 지호의 Phase 1 엔진(`minidb`)에 소희의 Redis HTTP 연동을 이식했습니다. `MINIDBMS_REDIS`를 설정하면 SELECT 결과를 캐시하며, Redis 장애 시 DB에서 직접 조회합니다.
+- 사용 예: `./scripts/run-dbms-with-redis.sh mini-dbms/examples/phase1.sql mini-dbms/examples/read-users.sql mini-dbms/examples/mutations.sql` (JDK 25+, Maven 필요).
 
-| 주제 | 설계 질문 |
-| --- | --- |
-| 동시성 | 여러 요청이 같은 키를 동시에 읽거나 수정할 때 데이터 일관성을 어떻게 지킬까? |
-| 만료 시간(TTL) | 만료된 키를 조회하면 무엇을 반환하고, 만료된 데이터는 언제 정리할까? |
-| 외부 API | 다른 애플리케이션에서 저장·조회·삭제를 쉽게 호출하려면 어떤 인터페이스가 좋을까? |
-| 캐시 무효화 | 원본 데이터가 바뀌었을 때 사용자가 기존 캐시를 어떻게 무효화할 수 있을까? |
-| 데이터 보존 (선택) | 서버가 비정상 종료된 뒤에도 데이터를 최대한 복구하려면 어떻게 보관해야 할까? |
+## 실행·테스트
 
-## ✅ 검증 체크리스트
+각 프로젝트 README에 명령이 있습니다: [mini-redis/README.md](mini-redis/README.md), [mini-dbms/README.md](mini-dbms/README.md)
 
-- [ ] **단위 테스트:** 저장, 조회, 삭제가 정상적으로 동작하는지 확인합니다.
-- [ ] **기능 테스트:** 간단한 예제 API를 만들고, 응답을 Mini Redis에 저장한 뒤 다음 요청에서 재사용할 수 있는지 확인합니다.
-- [ ] **경계 사례:** 없는 키 조회·삭제, 같은 키 덮어쓰기, 만료된 키 조회, 같은 키에 대한 동시 요청을 확인합니다.
-- [ ] **성능 비교:** 같은 조건에서 예제 API의 캐시 사용 전후 응답 시간을 비교합니다.
+| 대상 | 명령 | 결과 |
+|---|---|---|
+| Mini Redis | `cd mini-redis && mvn test` | 57개 통과 |
+| Mini DBMS | `cd mini-dbms && mvn test` | 220개 통과 (엔진·캐시, JUnit 병렬 실행) |

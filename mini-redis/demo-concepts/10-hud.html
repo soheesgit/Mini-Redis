@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 관제 HUD</title><link rel="stylesheet" href="base.css">
+<style>
+.wrap { display: grid; grid-template-columns: 260px 1fr 260px; gap: 12px; padding: 12px 14px 60px; }
+@media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+.panel { border: 1px solid var(--g2); padding: 10px; position: relative; }
+.panel::before { content: attr(data-t); position: absolute; top: -9px; left: 8px; background: var(--bg); padding: 0 6px; font-size: 11px; color: var(--c); }
+svg { width: 100%; height: auto; max-height: 72vh; }
+.ring { fill: none; stroke: var(--line); stroke-width: 1; }
+.cell { fill: #07140c; stroke: var(--g2); }
+.cell.full { fill: #0d3a1e; }
+.cell.hit { fill: var(--a); stroke: var(--a); filter: drop-shadow(0 0 10px var(--a)); }
+.lbl { fill: var(--g); font: 11px ui-monospace, Menlo, monospace; text-anchor: middle; }
+.sweep { fill: url(#sw); }
+.ping { fill: var(--a); filter: drop-shadow(0 0 8px var(--a)); }
+.bar { height: 10px; background: #07140c; border: 1px solid var(--g2); margin: 4px 0 10px; }
+.bar > div { height: 100%; background: var(--g); width: 0; transition: width .2s; }
+.tick { font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--g); max-height: 40vh; overflow: hidden; }
+.big { font-size: 26px; color: var(--a); text-shadow: 0 0 8px var(--a); }
+</style></head>
+<body class="scan">
+<div class="title"><h1 class="glow">10 · control HUD</h1><span class="sub">관제실 화면처럼: 가운데 원 = 버킷들, 요청이 날아와 칸에 꽂힌다. 양옆 = 큐·배치·AOF 계기판</span></div>
+<div class="wrap">
+  <div class="panel" data-t="INBOUND">
+    <div>REQUEST</div><div class="big" id="req">—</div>
+    <div style="margin-top:10px">STAGE</div><div id="stage" class="cy">—</div>
+    <div style="margin-top:10px">QUEUE</div><div class="bar"><div id="q"></div></div>
+    <div>LATENCY (recv→respond)</div><div class="big" id="lat">—</div>
+  </div>
+  <div class="panel" data-t="KEYSPACE · buckets">
+    <svg viewBox="-220 -220 440 440" id="radar">
+      <defs><radialGradient id="sw"><stop offset="0" stop-color="#39ff7a" stop-opacity=".25"/><stop offset="1" stop-color="#39ff7a" stop-opacity="0"/></radialGradient></defs>
+      <circle class="ring" r="200"/><circle class="ring" r="140"/><circle class="ring" r="80"/>
+      <path class="sweep" id="sweep" d="M0,0 L200,0 A200,200 0 0,1 141,141 Z"/>
+      <g id="cells"></g><circle class="ping" id="ping" r="6" cx="0" cy="-215" opacity="0"/>
+      <text class="lbl" id="center" y="5">—</text>
+    </svg>
+  </div>
+  <div class="panel" data-t="AOF / DISK">
+    <div>WRITES</div><div class="big" id="w">0</div>
+    <div style="margin-top:10px">LAST RECORD</div><div class="tick" id="rec"></div>
+    <div style="margin-top:10px">FSYNC</div><div id="fs" class="am">—</div>
+  </div>
+</div>
+<div class="hud">Space 멈춤 · → 다음 요청 <b id="cnt"></b></div>
+<script src="data.js"></script><script src="common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id), NS = 'http://www.w3.org/2000/svg';
+let ang = 0; (function spin() { ang = (ang + 1.5) % 360; $('sweep').setAttribute('transform', `rotate(${ang})`); requestAnimationFrame(spin); })();
+function drawRing(chains, hot) {
+  const g = $('cells'); g.textContent = '';
+  const n = chains.length, R = 150;
+  chains.forEach((c, i) => {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2, x = Math.cos(a) * R, y = Math.sin(a) * R;
+    const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', x - 26); r.setAttribute('y', y - 18); r.setAttribute('width', 52); r.setAttribute('height', 36);
+    r.setAttribute('class', `cell ${c.length ? 'full' : ''} ${i === hot ? 'hit' : ''}`); g.append(r);
+    const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'lbl'); t.setAttribute('x', x); t.setAttribute('y', y - 3); t.textContent = `[${i}]`; g.append(t);
+    const k = document.createElementNS(NS, 'text'); k.setAttribute('class', 'lbl'); k.setAttribute('x', x); k.setAttribute('y', y + 11); k.textContent = c.map((n) => n.k).join(',').slice(0, 8); g.append(k);
+  });
+  return (i) => { const a = (i / n) * Math.PI * 2 - Math.PI / 2; return [Math.cos(a) * R, Math.sin(a) * R]; };
+}
+let writes = 0;
+player(async (r, wait) => {
+  $('cnt').textContent = `요청 #${r.id}`; $('req').textContent = `#${r.id} ${r.method}`; $('lat').textContent = '—';
+  for (const h of r.hops) {
+    $('stage').textContent = `${h.from} → ${h.to}\n${h.label}`;
+    if (h.to === 'QUEUE') $('q').style.width = '30%';
+    if (h.from === 'QUEUE') $('q').style.width = '3%';
+    if (h.to === 'MEMORY' && r.snap && r.end.loc) {
+      const L = r.end.loc, t = L.table >= 0 ? L.table : 0, idx = t ? L.idx1 : L.idx0;
+      const chains = t ? r.snap.keys.t1 : r.snap.keys.t0;
+      const pos = drawRing(chains, -1);
+      $('center').textContent = `${chains.length} buckets`;
+      const [x, y] = pos(idx), ping = $('ping'); ping.setAttribute('opacity', 1);
+      for (let k = 0; k <= 1; k += 0.04) { ping.setAttribute('cx', x * k); ping.setAttribute('cy', -215 + (y + 215) * k); await wait(16); }
+      ping.setAttribute('opacity', 0); drawRing(chains, idx);
+      $('center').textContent = `${r.end.key} → [${idx}]`;
+    }
+    if (h.to === 'AOF') { $('w').textContent = ++writes; $('rec').textContent = `${TR.recArgs(h.data.replace(/ /g, '')).join(' ')}\n${h.data}`; }
+    if (h.to === 'CLIENT') $('lat').textContent = `${Math.round((h.t - r.hops[0].t) / 1000)}µs`;
+    if (h.to === 'DISK') $('fs').textContent = `${h.label} · ${h.data}`;
+    await wait(800);
+  }
+});
+</script></body></html>
