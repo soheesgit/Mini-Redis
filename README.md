@@ -51,19 +51,3 @@ B+ 트리는 **ID를 페이지 번호와 슬롯 위치에 연결**합니다. 수
 ![기능 단위 병합. 팀 Redis에 캐시 비교 방식과 만료 키 테스트를 반영했다. 지호의 SQL 엔진에 소희의 Redis HTTP 연동을 붙였고, 지호의 B+ 트리에 소희의 ID LIMIT 최적화를 반영했다.](docs/presentation/collaboration.png)
 
 각자 만든 결과를 비교한 뒤 **기능과 테스트를 함께 합쳤습니다.** 캐시가 만료된 뒤의 동작, 인덱스 범위 순회와 삭제 반영, `ORDER BY id LIMIT` 조기 종료를 검증했습니다. [Redis 병합 검증](mini-redis/검증결과.md) · [DBMS 인덱스 테스트](mini-dbms/src/test/java/minidb/engine/IndexIntegrationTest.java)
-
-## 실행과 테스트
-
-```bash
-node lunch-demo/demo.mjs prepare
-node lunch-demo/demo.mjs start
-```
-
-Node.js 22 이상과 JDK 25가 필요합니다. [로컬 점심 투표 데모](http://127.0.0.1:4173/)를 열면 됩니다. `prepare`는 데모용 데이터 100만 건을 미리 생성합니다. [실행 방법, API 및 데모 테스트](lunch-demo/README.md)
-
-| 폴더 | 내용 | 테스트 |
-| --- | --- | --- |
-| [`mini-redis/`](mini-redis/) | Java 키·값 저장소와 HTTP API | `mvn -f mini-redis/pom.xml test` |
-| [`mini-dbms/`](mini-dbms/) | SQL 엔진, 페이지·WAL, B+ 트리, HTTP 서버 | `mvn -f mini-dbms/pom.xml test` |
-| [`lunch-demo/`](lunch-demo/) | 발표용 투표 앱과 두 서비스의 중계 서버 | 데모 실행 후 `node --test lunch-demo/demo.test.mjs` |
-| [`scripts/`](scripts/) · [`study/`](study/) | 통합 실행 스크립트와 설계 자료 | |
