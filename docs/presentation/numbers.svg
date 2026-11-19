@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="580" viewBox="0 0 1280 580" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
+<title>성능 비교 6가지: 캐시 응답 시간 58.5 ms → 2.24 ms, 캐시 처리량 845 req/s → 21,558 req/s, 원본 호출 횟수 200번 → 1번, 한 행 찾기 73.6 ms → 0.09 ms, LIMIT 20 조회 129 ms → 0.17 ms, 100만 행 삽입 6.3 s → 0.88 s</title>
+<rect width="1280" height="580" fill="#f5f4ef"/>
+<rect x="16" y="16" width="1248" height="548" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
+<text x="56" y="78" font-size="20" font-weight="700" fill="#222222">캐시 응답 시간</text>
+<text x="56" y="104" font-size="14" fill="#8a8780">Redis · p50 · 짧을수록 좋음</text>
+<text x="428" y="72" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">없음</text>
+<rect x="440" y="56" width="470.0" height="22" rx="6" fill="#b84a35"/>
+<text x="920.0" y="73" font-size="17" font-weight="700" fill="#b84a35">58.5 ms</text>
+<text x="428" y="102" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">HIT</text>
+<rect x="440" y="86" width="18.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="468.0" y="103" font-size="17" font-weight="700" fill="#1a6b52">2.24 ms</text>
+<rect x="1074" y="58" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="91" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">26배</text>
+<line x1="56" y1="124" x2="1224" y2="124" stroke="#eeece6" stroke-width="2"/>
+<text x="56" y="162" font-size="20" font-weight="700" fill="#222222">캐시 처리량</text>
+<text x="56" y="188" font-size="14" fill="#8a8780">Redis · 많을수록 좋음</text>
+<text x="428" y="156" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">없음</text>
+<rect x="440" y="140" width="18.4" height="22" rx="6" fill="#b84a35"/>
+<text x="468.4" y="157" font-size="17" font-weight="700" fill="#b84a35">845 req/s</text>
+<text x="428" y="186" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">HIT</text>
+<rect x="440" y="170" width="470.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="920.0" y="187" font-size="17" font-weight="700" fill="#1a6b52">21,558 req/s</text>
+<rect x="1074" y="142" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="175" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">25배</text>
+<line x1="56" y1="208" x2="1224" y2="208" stroke="#eeece6" stroke-width="2"/>
+<text x="56" y="246" font-size="20" font-weight="700" fill="#222222">원본 호출 횟수</text>
+<text x="56" y="272" font-size="14" fill="#8a8780">같은 키 동시 200건 · single-flight</text>
+<text x="428" y="240" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">끔</text>
+<rect x="440" y="224" width="470.0" height="22" rx="6" fill="#b84a35"/>
+<text x="920.0" y="241" font-size="17" font-weight="700" fill="#b84a35">200번</text>
+<text x="428" y="270" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">켬</text>
+<rect x="440" y="254" width="8.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="458.0" y="271" font-size="17" font-weight="700" fill="#1a6b52">1번</text>
+<rect x="1074" y="226" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="259" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">1/200</text>
+<line x1="56" y1="292" x2="1224" y2="292" stroke="#eeece6" stroke-width="2"/>
+<text x="56" y="330" font-size="20" font-weight="700" fill="#222222">한 행 찾기</text>
+<text x="56" y="356" font-size="14" fill="#8a8780">100만 행 · 전체 스캔 → B+ 트리</text>
+<text x="428" y="324" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">스캔</text>
+<rect x="440" y="308" width="470.0" height="22" rx="6" fill="#b84a35"/>
+<text x="920.0" y="325" font-size="17" font-weight="700" fill="#b84a35">73.6 ms</text>
+<text x="428" y="354" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">B+</text>
+<rect x="440" y="338" width="8.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="458.0" y="355" font-size="17" font-weight="700" fill="#1a6b52">0.09 ms</text>
+<rect x="1074" y="310" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="343" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">800배</text>
+<line x1="56" y1="376" x2="1224" y2="376" stroke="#eeece6" stroke-width="2"/>
+<text x="56" y="414" font-size="20" font-weight="700" fill="#222222">LIMIT 20 조회</text>
+<text x="56" y="440" font-size="14" fill="#8a8780">조기 종료 · 페이지 4,944개 → 1개</text>
+<text x="428" y="408" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">전</text>
+<rect x="440" y="392" width="470.0" height="22" rx="6" fill="#b84a35"/>
+<text x="920.0" y="409" font-size="17" font-weight="700" fill="#b84a35">129 ms</text>
+<text x="428" y="438" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">후</text>
+<rect x="440" y="422" width="8.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="458.0" y="439" font-size="17" font-weight="700" fill="#1a6b52">0.17 ms</text>
+<rect x="1074" y="394" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="427" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">760배</text>
+<line x1="56" y1="460" x2="1224" y2="460" stroke="#eeece6" stroke-width="2"/>
+<text x="56" y="498" font-size="20" font-weight="700" fill="#222222">100만 행 삽입</text>
+<text x="56" y="524" font-size="14" fill="#8a8780">fsync on → off · 정전 시 최근 커밋 유실</text>
+<text x="428" y="492" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">on</text>
+<rect x="440" y="476" width="470.0" height="22" rx="6" fill="#b84a35"/>
+<text x="920.0" y="493" font-size="17" font-weight="700" fill="#b84a35">6.3 s</text>
+<text x="428" y="522" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">off</text>
+<rect x="440" y="506" width="65.3" height="22" rx="6" fill="#1a6b52"/>
+<text x="515.3" y="523" font-size="17" font-weight="700" fill="#1a6b52">0.88 s</text>
+<rect x="1074" y="478" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="511" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">7배</text>
+</svg>
