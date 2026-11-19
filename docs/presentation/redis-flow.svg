@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
+  <title>Mini Redis 요청 한 개의 흐름: 클라이언트 → HTTP 핸들러 → 명령 큐 → executor 1개 → AOF 기록 → 응답</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1L8 5L1 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="1280" height="320" fill="#f5f4ef"/>
+  <rect x="16" y="16" width="1248" height="288" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
+
+  <rect x="56" y="70" width="160" height="100" rx="16" fill="#f5f4ef"/>
+  <text x="136" y="127" text-anchor="middle" font-size="22" font-weight="700" fill="#222">클라이언트</text>
+  <line x1="218" y1="120" x2="272" y2="120" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="276" y="70" width="210" height="100" rx="16" fill="#f5f4ef"/>
+  <text x="381" y="127" text-anchor="middle" font-size="22" font-weight="700" fill="#222">HTTP 핸들러</text>
+  <line x1="488" y1="120" x2="542" y2="120" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="546" y="70" width="180" height="100" rx="16" fill="#f5f4ef"/>
+  <text x="636" y="108" text-anchor="middle" font-size="22" font-weight="700" fill="#222">명령 큐</text>
+  <rect x="576" y="124" width="22" height="28" rx="5" fill="#d3d1c7"/>
+  <rect x="602" y="124" width="22" height="28" rx="5" fill="#d3d1c7"/>
+  <rect x="628" y="124" width="22" height="28" rx="5" fill="#d3d1c7"/>
+  <rect x="654" y="124" width="22" height="28" rx="5" fill="#d3d1c7"/>
+  <rect x="680" y="124" width="22" height="28" rx="5" fill="#d3d1c7"/>
+  <line x1="728" y1="120" x2="782" y2="120" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="786" y="70" width="250" height="100" rx="16" fill="#f9e8e1"/>
+  <text x="911" y="114" text-anchor="middle" font-size="22" font-weight="700" fill="#b84a35">executor 1개</text>
+  <text x="911" y="145" text-anchor="middle" font-size="17" fill="#b84a35">데이터는 여기서만</text>
+
+  <line x1="1038" y1="120" x2="1102" y2="120" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <text x="1070" y="106" text-anchor="middle" font-size="16" font-weight="700" fill="#5f5e5a">①</text>
+
+  <rect x="1106" y="75" width="120" height="90" rx="14" fill="none" stroke="#b4b2a9" stroke-width="2" stroke-dasharray="7 6"/>
+  <text x="1166" y="127" text-anchor="middle" font-size="22" font-weight="700" fill="#444">AOF</text>
+
+  <path d="M911 172 V250 H136 V176" fill="none" stroke="#1a6b52" stroke-width="2" marker-end="url(#a)"/>
+  <text x="523" y="240" text-anchor="middle" font-size="18" font-weight="700" fill="#1a6b52">② 기록한 뒤에 응답</text>
+</svg>

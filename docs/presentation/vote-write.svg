@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="340" viewBox="0 0 1280 340" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
+  <title>투표하면 Node 서버가 DBMS를 먼저 UPDATE하고, 그다음 Redis의 순위 캐시를 지운다</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1L8 5L1 9" fill="none" stroke="#8a8780" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="1280" height="340" fill="#f5f4ef"/>
+  <rect x="16" y="16" width="1248" height="308" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
+
+  <rect x="56" y="120" width="200" height="100" rx="16" fill="#f5f4ef"/>
+  <text x="156" y="162" text-anchor="middle" font-size="22" font-weight="700" fill="#222">브라우저</text>
+  <text x="156" y="192" text-anchor="middle" font-size="17" fill="#5f5e5a">김치찌개 투표</text>
+  <line x1="258" y1="170" x2="332" y2="170" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="336" y="120" width="200" height="100" rx="16" fill="#f5f4ef"/>
+  <text x="436" y="177" text-anchor="middle" font-size="22" font-weight="700" fill="#222">Node 서버</text>
+
+  <path d="M538 150 H600 V95 H692" fill="none" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M538 190 H600 V245 H692" fill="none" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="696" y="50" width="400" height="90" rx="16" fill="#e6eef8"/>
+  <text x="896" y="88" text-anchor="middle" font-size="24" font-weight="700" fill="#3a5a8c">① DBMS UPDATE</text>
+  <text x="896" y="119" text-anchor="middle" font-size="17" fill="#3a5a8c">12표 → 13표</text>
+
+  <rect x="696" y="200" width="400" height="90" rx="16" fill="#f9e8e1"/>
+  <text x="896" y="238" text-anchor="middle" font-size="24" font-weight="700" fill="#b84a35">② Redis 순위 캐시 삭제</text>
+  <text x="896" y="269" text-anchor="middle" font-size="17" fill="#b84a35">DELETE lunch:ranking</text>
+</svg>
