@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="328" viewBox="0 0 1280 328" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
+<title>캐시 응답 시간 58.5 ms → 2.24 ms (26배), 캐시 처리량 845 req/s → 21,558 req/s (25배), 원본 호출 횟수 200번 → 1번 (1/200)</title>
+<rect width="1280" height="328" fill="#f5f4ef"/>
+<rect x="16" y="16" width="1248" height="296" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
+<text x="56" y="78" font-size="20" font-weight="700" fill="#222222">캐시 응답 시간</text>
+<text x="56" y="104" font-size="14" fill="#8a8780">p50 · 짧을수록 좋음</text>
+<text x="428" y="72" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">없음</text>
+<rect x="440" y="56" width="470.0" height="22" rx="6" fill="#b84a35"/>
+<text x="920.0" y="73" font-size="17" font-weight="700" fill="#b84a35">58.5 ms</text>
+<text x="428" y="102" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">HIT</text>
+<rect x="440" y="86" width="18.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="468.0" y="103" font-size="17" font-weight="700" fill="#1a6b52">2.24 ms</text>
+<rect x="1074" y="58" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="91" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">26배</text>
+<line x1="56" y1="124" x2="1224" y2="124" stroke="#eeece6" stroke-width="2"/>
+<text x="56" y="162" font-size="20" font-weight="700" fill="#222222">캐시 처리량</text>
+<text x="56" y="188" font-size="14" fill="#8a8780">많을수록 좋음</text>
+<text x="428" y="156" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">없음</text>
+<rect x="440" y="140" width="18.4" height="22" rx="6" fill="#b84a35"/>
+<text x="468.4" y="157" font-size="17" font-weight="700" fill="#b84a35">845 req/s</text>
+<text x="428" y="186" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">HIT</text>
+<rect x="440" y="170" width="470.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="920.0" y="187" font-size="17" font-weight="700" fill="#1a6b52">21,558 req/s</text>
+<rect x="1074" y="142" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="175" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">25배</text>
+<line x1="56" y1="208" x2="1224" y2="208" stroke="#eeece6" stroke-width="2"/>
+<text x="56" y="246" font-size="20" font-weight="700" fill="#222222">원본 호출 횟수</text>
+<text x="56" y="272" font-size="14" fill="#8a8780">같은 키 동시 200건 · single-flight</text>
+<text x="428" y="240" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">끔</text>
+<rect x="440" y="224" width="470.0" height="22" rx="6" fill="#b84a35"/>
+<text x="920.0" y="241" font-size="17" font-weight="700" fill="#b84a35">200번</text>
+<text x="428" y="270" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">켬</text>
+<rect x="440" y="254" width="8.0" height="22" rx="6" fill="#1a6b52"/>
+<text x="458.0" y="271" font-size="17" font-weight="700" fill="#1a6b52">1번</text>
+<rect x="1074" y="226" width="150" height="50" rx="12" fill="#e1f0e6"/>
+<text x="1149" y="259" text-anchor="middle" font-size="24" font-weight="700" fill="#1a6b52">1/200</text>
+</svg>
