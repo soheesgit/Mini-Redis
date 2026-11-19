@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
+<title>Redis 트러블슈팅: 요청 실패. 증상 1% 실패, 해결 서버 옵션 조정, 결과 0건</title>
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L8 5L1 9" fill="none" stroke="#8a8780" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect width="1280" height="300" fill="#f5f4ef"/>
+<rect x="16" y="16" width="1248" height="268" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
+<rect x="56" y="80" width="150" height="120" rx="16" fill="#f9e8e1"/>
+<text x="131" y="128" text-anchor="middle" font-size="16" font-weight="700" fill="#b84a35">Redis</text>
+<text x="131" y="160" text-anchor="middle" font-size="20" font-weight="700" fill="#b84a35">요청 실패</text>
+<text x="386" y="62" text-anchor="middle" font-size="15" font-weight="700" fill="#8a8780">증상</text>
+<rect x="236" y="80" width="300" height="120" rx="14" fill="#fbeeea"/>
+<text x="386" y="138" text-anchor="middle" font-size="30" font-weight="700" fill="#b84a35">1% 실패</text>
+<text x="386" y="172" text-anchor="middle" font-size="16" fill="#b84a35">76,798건 중 718건</text>
+<text x="726" y="62" text-anchor="middle" font-size="15" font-weight="700" fill="#8a8780">해결</text>
+<rect x="576" y="80" width="300" height="120" rx="14" fill="#f5f4ef"/>
+<text x="726" y="138" text-anchor="middle" font-size="30" font-weight="700" fill="#222222">서버 옵션 조정</text>
+<text x="726" y="172" text-anchor="middle" font-size="16" fill="#222222">JDK HTTP 서버</text>
+<text x="1066" y="62" text-anchor="middle" font-size="15" font-weight="700" fill="#8a8780">결과</text>
+<rect x="916" y="80" width="300" height="120" rx="14" fill="#e1f0e6"/>
+<text x="1066" y="138" text-anchor="middle" font-size="36" font-weight="700" fill="#1a6b52">0건</text>
+<text x="1066" y="172" text-anchor="middle" font-size="16" fill="#1a6b52">처리량 약 2배 · 29,492 rps</text>
+<line x1="538" y1="140" x2="572" y2="140" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+<line x1="878" y1="140" x2="912" y2="140" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+<text x="640" y="246" text-anchor="middle" font-size="16" fill="#8a8780">원인 · 서버가 이미 닫은 연결을 클라이언트가 다시 쓴 것으로 추정</text>
+</svg>
