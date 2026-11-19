@@ -1,49 +1,37 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
-  <title>프로젝트 한눈에: 브라우저 → Node 데모 서버 → Mini DBMS와 Mini Redis → 각자의 디스크 파일</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="380" viewBox="0 0 1280 380" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
+  <title>프로젝트 한눈에: 클라이언트가 Mini DBMS에 SQL을 보내고, Mini DBMS는 SELECT 결과를 Mini Redis에 캐시한다. 각 서버는 자기 디스크 파일에 저장한다</title>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M1 1L8 5L1 9" fill="none" stroke="#8a8780" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
   </defs>
-  <rect width="1280" height="420" fill="#f5f4ef"/>
-  <rect x="16" y="16" width="1248" height="388" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
+  <rect width="1280" height="380" fill="#f5f4ef"/>
+  <rect x="16" y="16" width="1248" height="348" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
 
-  <rect x="56" y="150" width="220" height="110" rx="16" fill="#f5f4ef"/>
-  <text x="166" y="196" text-anchor="middle" font-size="26" font-weight="700" fill="#222">브라우저</text>
-  <text x="166" y="230" text-anchor="middle" font-size="17" fill="#5f5e5a">Mini React 점심 투표</text>
+  <rect x="56" y="70" width="200" height="110" rx="16" fill="#f5f4ef"/>
+  <text x="156" y="133" text-anchor="middle" font-size="24" font-weight="700" fill="#222">클라이언트</text>
 
-  <line x1="280" y1="205" x2="350" y2="205" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
-  <text x="315" y="192" text-anchor="middle" font-size="15" fill="#5f5e5a">HTTP</text>
+  <line x1="258" y1="125" x2="402" y2="125" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <text x="330" y="110" text-anchor="middle" font-size="16" fill="#5f5e5a">POST /query</text>
+  <text x="330" y="148" text-anchor="middle" font-size="15" fill="#8a8780">SQL 한 문장</text>
 
-  <rect x="356" y="150" width="220" height="110" rx="16" fill="#f5f4ef"/>
-  <text x="466" y="196" text-anchor="middle" font-size="26" font-weight="700" fill="#222">Node 서버</text>
-  <text x="466" y="230" text-anchor="middle" font-size="17" fill="#5f5e5a">캐시 먼저, 없으면 DB</text>
+  <rect x="406" y="60" width="300" height="130" rx="16" fill="#e6eef8"/>
+  <text x="556" y="116" text-anchor="middle" font-size="28" font-weight="700" fill="#3a5a8c">Mini DBMS</text>
+  <text x="556" y="152" text-anchor="middle" font-size="17" fill="#3a5a8c">SQL · B+ 트리 · WAL</text>
 
-  <path d="M580 185 H600 V116 H710" fill="none" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
-  <text x="658" y="104" text-anchor="middle" font-size="15" fill="#5f5e5a">POST /query</text>
-  <text x="658" y="140" text-anchor="middle" font-size="14" fill="#8a8780">SQL 한 문장</text>
+  <line x1="708" y1="125" x2="922" y2="125" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <text x="815" y="110" text-anchor="middle" font-size="16" fill="#5f5e5a">SELECT 결과 캐시</text>
+  <text x="815" y="148" text-anchor="middle" font-size="15" fill="#8a8780">GET · PUT /keys</text>
 
-  <path d="M580 225 H600 V294 H710" fill="none" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
-  <text x="658" y="282" text-anchor="middle" font-size="15" fill="#5f5e5a">/keys/…</text>
-  <text x="658" y="318" text-anchor="middle" font-size="14" fill="#8a8780">GET · PUT · DEL</text>
+  <rect x="926" y="60" width="300" height="130" rx="16" fill="#f9e8e1"/>
+  <text x="1076" y="116" text-anchor="middle" font-size="28" font-weight="700" fill="#b84a35">Mini Redis</text>
+  <text x="1076" y="152" text-anchor="middle" font-size="17" fill="#b84a35">해시 테이블 · TTL · AOF</text>
 
-  <rect x="716" y="56" width="260" height="120" rx="16" fill="#e6eef8"/>
-  <text x="846" y="106" text-anchor="middle" font-size="28" font-weight="700" fill="#3a5a8c">Mini DBMS</text>
-  <text x="846" y="142" text-anchor="middle" font-size="17" fill="#3a5a8c">SQL · B+ 트리 · WAL</text>
+  <line x1="556" y1="192" x2="556" y2="236" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="1076" y1="192" x2="1076" y2="236" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
 
-  <rect x="716" y="234" width="260" height="120" rx="16" fill="#f9e8e1"/>
-  <text x="846" y="284" text-anchor="middle" font-size="28" font-weight="700" fill="#b84a35">Mini Redis</text>
-  <text x="846" y="320" text-anchor="middle" font-size="17" fill="#b84a35">해시 테이블 · TTL · AOF</text>
-
-  <line x1="980" y1="116" x2="1040" y2="116" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
-  <line x1="980" y1="294" x2="1040" y2="294" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
-
-  <rect x="1046" y="76" width="178" height="80" rx="14" fill="none" stroke="#b4b2a9" stroke-width="2" stroke-dasharray="7 6"/>
-  <text x="1135" y="110" text-anchor="middle" font-size="17" font-weight="700" fill="#444">테이블.db</text>
-  <text x="1135" y="136" text-anchor="middle" font-size="17" font-weight="700" fill="#444">테이블.wal</text>
-
-  <rect x="1046" y="254" width="178" height="80" rx="14" fill="none" stroke="#b4b2a9" stroke-width="2" stroke-dasharray="7 6"/>
-  <text x="1135" y="300" text-anchor="middle" font-size="17" font-weight="700" fill="#444">AOF · RDB</text>
-
-  <text x="640" y="384" text-anchor="middle" font-size="16" fill="#8a8780">두 서버는 서로의 코드를 모르고 HTTP로만 연결됩니다</text>
+  <rect x="446" y="240" width="220" height="70" rx="14" fill="none" stroke="#b4b2a9" stroke-width="2" stroke-dasharray="7 6"/>
+  <text x="556" y="282" text-anchor="middle" font-size="18" font-weight="700" fill="#444">테이블.db + .wal</text>
+  <rect x="966" y="240" width="220" height="70" rx="14" fill="none" stroke="#b4b2a9" stroke-width="2" stroke-dasharray="7 6"/>
+  <text x="1076" y="282" text-anchor="middle" font-size="18" font-weight="700" fill="#444">AOF · RDB</text>
 </svg>
