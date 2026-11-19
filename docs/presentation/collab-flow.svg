@@ -2,49 +2,49 @@
   <title>협업 방식: Redis는 각자 끝까지 구현한 뒤 비교해서 하나로 합쳤고, DBMS는 Phase 1, 2, 3마다 합쳤다</title>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M1 1L8 5L1 9" fill="none" stroke="#8a8780" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M1 1L8 5L1 9" fill="none" stroke="#8E9096" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
   </defs>
-  <rect width="1280" height="400" fill="#f5f4ef"/>
-  <rect x="16" y="16" width="1248" height="368" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
+  <rect width="1280" height="400" fill="#FFFFFF"/>
+  <rect x="16" y="16" width="1248" height="368" rx="24" fill="#ffffff" stroke="#CDCED1" stroke-width="2"/>
 
-  <rect x="56" y="60" width="170" height="120" rx="16" fill="#f9e8e1"/>
-  <text x="141" y="110" text-anchor="middle" font-size="22" font-weight="700" fill="#b84a35">Redis</text>
-  <text x="141" y="140" text-anchor="middle" font-size="16" fill="#b84a35">끝까지 따로 → 비교</text>
+  <rect x="56" y="60" width="170" height="120" rx="16" fill="#CDCED1"/>
+  <text x="141" y="110" text-anchor="middle" font-size="22" font-weight="700" fill="#2A2A2A">Redis</text>
+  <text x="141" y="140" text-anchor="middle" font-size="16" fill="#2A2A2A">끝까지 따로 → 비교</text>
 
-  <rect x="266" y="60" width="200" height="52" rx="12" fill="#f5f4ef"/>
-  <text x="366" y="93" text-anchor="middle" font-size="19" font-weight="700" fill="#222">지호 전체 구현</text>
-  <rect x="266" y="128" width="200" height="52" rx="12" fill="#f5f4ef"/>
-  <text x="366" y="161" text-anchor="middle" font-size="19" font-weight="700" fill="#222">소희 전체 구현</text>
+  <rect x="266" y="60" width="200" height="52" rx="12" fill="#F1F2F4"/>
+  <text x="366" y="93" text-anchor="middle" font-size="19" font-weight="700" fill="#2A2A2A">지호 전체 구현</text>
+  <rect x="266" y="128" width="200" height="52" rx="12" fill="#F1F2F4"/>
+  <text x="366" y="161" text-anchor="middle" font-size="19" font-weight="700" fill="#2A2A2A">소희 전체 구현</text>
 
-  <path d="M468 86 H500 V120 H542" fill="none" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
-  <path d="M468 154 H500 V120" fill="none" stroke="#8a8780" stroke-width="2"/>
+  <path d="M468 86 H500 V120 H542" fill="none" stroke="#8E9096" stroke-width="2" marker-end="url(#a)"/>
+  <path d="M468 154 H500 V120" fill="none" stroke="#8E9096" stroke-width="2"/>
 
-  <rect x="546" y="90" width="180" height="60" rx="14" fill="#f6ecd9"/>
-  <text x="636" y="127" text-anchor="middle" font-size="20" font-weight="700" fill="#8a5a14">서로 비교</text>
-  <line x1="728" y1="120" x2="792" y2="120" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="546" y="90" width="180" height="60" rx="14" fill="#E6E7EA"/>
+  <text x="636" y="127" text-anchor="middle" font-size="20" font-weight="700" fill="#2A2A2A">서로 비교</text>
+  <line x1="728" y1="120" x2="792" y2="120" stroke="#8E9096" stroke-width="2" marker-end="url(#a)"/>
 
-  <rect x="796" y="75" width="430" height="90" rx="16" fill="#e1f0e6"/>
-  <text x="1011" y="112" text-anchor="middle" font-size="21" font-weight="700" fill="#1a6b52">하나로 합침</text>
-  <text x="1011" y="142" text-anchor="middle" font-size="16" fill="#1a6b52">지호 엔진 + 소희 캐시 비교 방식·경계 테스트</text>
+  <rect x="796" y="75" width="430" height="90" rx="16" fill="#DCE5F8"/>
+  <text x="1011" y="112" text-anchor="middle" font-size="21" font-weight="700" fill="#4B77D8">하나로 합침</text>
+  <text x="1011" y="142" text-anchor="middle" font-size="16" fill="#4B77D8">지호 엔진 + 소희 캐시 비교 방식·경계 테스트</text>
 
-  <line x1="56" y1="210" x2="1224" y2="210" stroke="#eeece6" stroke-width="2"/>
+  <line x1="56" y1="210" x2="1224" y2="210" stroke="#E6E7EA" stroke-width="2"/>
 
-  <rect x="56" y="240" width="170" height="120" rx="16" fill="#e6eef8"/>
-  <text x="141" y="290" text-anchor="middle" font-size="22" font-weight="700" fill="#3a5a8c">DBMS</text>
-  <text x="141" y="320" text-anchor="middle" font-size="16" fill="#3a5a8c">페이즈마다 합침</text>
+  <rect x="56" y="240" width="170" height="120" rx="16" fill="#DCE5F8"/>
+  <text x="141" y="290" text-anchor="middle" font-size="22" font-weight="700" fill="#4B77D8">DBMS</text>
+  <text x="141" y="320" text-anchor="middle" font-size="16" fill="#4B77D8">페이즈마다 합침</text>
 
-  <rect x="266" y="255" width="280" height="90" rx="16" fill="#f5f4ef"/>
-  <text x="406" y="292" text-anchor="middle" font-size="20" font-weight="700" fill="#222">Phase 1 · SQL 엔진</text>
-  <text x="406" y="322" text-anchor="middle" font-size="16" fill="#5f5e5a">지호 엔진 + 소희 Redis 연동</text>
-  <line x1="548" y1="300" x2="582" y2="300" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="266" y="255" width="280" height="90" rx="16" fill="#F1F2F4"/>
+  <text x="406" y="292" text-anchor="middle" font-size="20" font-weight="700" fill="#2A2A2A">Phase 1 · SQL 엔진</text>
+  <text x="406" y="322" text-anchor="middle" font-size="16" fill="#55575C">지호 엔진 + 소희 Redis 연동</text>
+  <line x1="548" y1="300" x2="582" y2="300" stroke="#8E9096" stroke-width="2" marker-end="url(#a)"/>
 
-  <rect x="586" y="255" width="280" height="90" rx="16" fill="#f5f4ef"/>
-  <text x="726" y="292" text-anchor="middle" font-size="20" font-weight="700" fill="#222">Phase 2 · B+ 트리</text>
-  <text x="726" y="322" text-anchor="middle" font-size="16" fill="#5f5e5a">소희 인덱스 연동 + 지호 트리</text>
-  <line x1="868" y1="300" x2="902" y2="300" stroke="#8a8780" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="586" y="255" width="280" height="90" rx="16" fill="#F1F2F4"/>
+  <text x="726" y="292" text-anchor="middle" font-size="20" font-weight="700" fill="#2A2A2A">Phase 2 · B+ 트리</text>
+  <text x="726" y="322" text-anchor="middle" font-size="16" fill="#55575C">소희 인덱스 연동 + 지호 트리</text>
+  <line x1="868" y1="300" x2="902" y2="300" stroke="#8E9096" stroke-width="2" marker-end="url(#a)"/>
 
-  <rect x="906" y="255" width="320" height="90" rx="16" fill="#f5f4ef"/>
-  <text x="1066" y="292" text-anchor="middle" font-size="20" font-weight="700" fill="#222">Phase 3 · HTTP 병렬 실행</text>
-  <text x="1066" y="322" text-anchor="middle" font-size="16" fill="#5f5e5a">Phase 2 위에 이어서 합침</text>
+  <rect x="906" y="255" width="320" height="90" rx="16" fill="#F1F2F4"/>
+  <text x="1066" y="292" text-anchor="middle" font-size="20" font-weight="700" fill="#2A2A2A">Phase 3 · HTTP 병렬 실행</text>
+  <text x="1066" y="322" text-anchor="middle" font-size="16" fill="#55575C">Phase 2 위에 이어서 합침</text>
 </svg>

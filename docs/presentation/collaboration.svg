@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="296" viewBox="0 0 1280 296" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
+  <title>합친 결과: Mini Redis는 캐시 비교 방식과 만료 키 테스트, Mini DBMS는 지호 SQL 엔진과 소희 Redis HTTP 연동, B+ 트리는 지호 B+ 트리와 범위 조회·삭제 테스트</title>
+  <rect width="1280" height="296" fill="#FFFFFF"/>
+  <rect x="16" y="16" width="1248" height="264" rx="24" fill="#ffffff" stroke="#CDCED1" stroke-width="2"/>
+
+  <rect x="56" y="44" width="1168" height="58" rx="12" fill="#F1F2F4"/>
+  <rect x="56" y="44" width="206" height="58" rx="12" fill="#CDCED1"/>
+  <text x="159" y="80" text-anchor="middle" font-size="20" font-weight="700" fill="#2A2A2A">Mini Redis</text>
+  <text x="292" y="80" font-size="20" font-weight="700" fill="#2A2A2A">캐시 비교 방식 · 만료 키 테스트</text>
+
+  <rect x="56" y="120" width="1168" height="58" rx="12" fill="#F1F2F4"/>
+  <rect x="56" y="120" width="206" height="58" rx="12" fill="#DCE5F8"/>
+  <text x="159" y="156" text-anchor="middle" font-size="20" font-weight="700" fill="#4B77D8">Mini DBMS</text>
+  <text x="292" y="156" font-size="20" font-weight="700" fill="#2A2A2A">지호 SQL 엔진 + 소희 Redis HTTP 연동</text>
+
+  <rect x="56" y="196" width="1168" height="58" rx="12" fill="#F1F2F4"/>
+  <rect x="56" y="196" width="206" height="58" rx="12" fill="#4B77D8"/>
+  <text x="159" y="232" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF">B+ 트리</text>
+  <text x="292" y="232" font-size="20" font-weight="700" fill="#2A2A2A">지호 B+ 트리 + 범위 조회·삭제 테스트</text>
+</svg>
