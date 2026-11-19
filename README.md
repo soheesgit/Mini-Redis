@@ -8,7 +8,7 @@ Java 25 · 런타임 외부 라이브러리 0개 · 테스트 DBMS 246개 / Redi
 
 </div>
 
-한눈에 → Redis → DBMS → 투표 흐름 → 숫자로 보기 → 트러블슈팅 → 시연 (총 4분)
+한눈에 → Redis → DBMS → 투표 흐름 → 숫자로 보기 → 트러블슈팅 → 협업 방식 → 시연 (총 4분)
 
 ## 1. 프로젝트 한눈에
 
@@ -83,7 +83,14 @@ B 요청은 A의 쓰기를 기다리지 않고 먼저 응답했습니다. A 조�
 
 세부 내용: [Redis 트러블슈팅](mini-redis/트러블슈팅.md) · 메모리 문제는 `-XX:+ExitOnOutOfMemoryError`, 힙 32MB 재현 테스트로 확인했습니다.
 
-## 7. 시연
+## 7. 협업 방식
+
+![Redis는 지호와 소희가 각자 끝까지 구현한 뒤 서로 비교해서 하나로 합쳤다. DBMS는 Phase 1 SQL 엔진, Phase 2 B+ 트리, Phase 3 HTTP 병렬 실행마다 합쳤다](docs/presentation/collab-flow.png)
+
+- **Redis**: 둘 다 처음부터 끝까지 구현한 뒤 비교했습니다. 지호 엔진을 기준으로 소희 구현의 캐시 비교 방식(`BYPASS`·`X-Cache`)과 경계 테스트를 가져왔습니다.
+- **DBMS**: 규모가 커서 페이즈마다 비교하고 합친 뒤, 합친 결과 위에서 다음 페이즈를 시작했습니다.
+
+## 8. 시연
 
 ![김치찌개가 13표로 1위에 오른 점심 투표 화면과 DBMS·Redis 시스템 로그](docs/presentation/lunch-vote.jpg)
 
