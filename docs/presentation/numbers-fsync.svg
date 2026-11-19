@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="160" viewBox="0 0 1280 160" font-family="'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',sans-serif">
 <title>100만 행 삽입 6.3 s → 0.88 s (7배)</title>
-<rect width="1280" height="160" fill="#f5f4ef"/>
-<rect x="16" y="16" width="1248" height="128" rx="24" fill="#ffffff" stroke="#e2e0da" stroke-width="2"/>
-<text x="56" y="78" font-size="20" font-weight="700" fill="#222222">100만 행 삽입</text>
-<text x="56" y="104" font-size="14" fill="#8a8780">WAL fsync on → off</text>
-<text x="428" y="72" text-anchor="end" font-size="14" font-weight="700" fill="#b84a35">on</text>
-<rect x="440" y="56" width="470.0" height="22" rx="6" fill="#b84a35"/>
-<text x="920.0" y="73" font-size="17" font-weight="700" fill="#b84a35">6.3 s</text>
-<text x="428" y="102" text-anchor="end" font-size="14" font-weight="700" fill="#1a6b52">off</text>
-<rect x="440" y="86" width="65.3" height="22" rx="6" fill="#1a6b52"/>
-<text x="515.3" y="103" font-size="17" font-weight="700" fill="#1a6b52">0.88 s</text>
-<rect x="1074" y="58" width="150" height="50" rx="12" fill="#f6ecd9"/>
-<text x="1149" y="91" text-anchor="middle" font-size="24" font-weight="700" fill="#8a5a14">7배</text>
+<rect width="1280" height="160" fill="#FFFFFF"/>
+<rect x="16" y="16" width="1248" height="128" rx="24" fill="#ffffff" stroke="#CDCED1" stroke-width="2"/>
+<text x="56" y="78" font-size="20" font-weight="700" fill="#2A2A2A">100만 행 삽입</text>
+<text x="56" y="104" font-size="14" fill="#8E9096">WAL fsync on → off</text>
+<text x="428" y="72" text-anchor="end" font-size="14" font-weight="700" fill="#2A2A2A">on</text>
+<rect x="440" y="56" width="470.0" height="22" rx="6" fill="#CDCED1"/>
+<text x="920.0" y="73" font-size="17" font-weight="700" fill="#2A2A2A">6.3 s</text>
+<text x="428" y="102" text-anchor="end" font-size="14" font-weight="700" fill="#4B77D8">off</text>
+<rect x="440" y="86" width="65.3" height="22" rx="6" fill="#4B77D8"/>
+<text x="515.3" y="103" font-size="17" font-weight="700" fill="#4B77D8">0.88 s</text>
+<rect x="1074" y="58" width="150" height="50" rx="12" fill="#E6E7EA"/>
+<text x="1149" y="91" text-anchor="middle" font-size="24" font-weight="700" fill="#2A2A2A">7배</text>
 </svg>
